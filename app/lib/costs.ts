@@ -9,6 +9,9 @@ const PRICES: Record<string, { input: number; output: number }> = {
   "text-embedding-3-small": { input: 0.02, output: 0 },
   // Whisper cobra por minuto ($0.006/min). Aqui 1 "token" = 1 segundo de áudio.
   "whisper-1": { input: 100, output: 0 },
+  // ElevenLabs cobra em créditos por caractere; estimativa ~$0.08/1k chars (Flash v2.5).
+  // Aqui 1 "token" = 1 caractere.
+  eleven_flash_v2_5: { input: 83, output: 0 },
 };
 
 const USD_TO_CAD = Number(process.env.USD_TO_CAD ?? 1.37);

@@ -22,9 +22,42 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [costs, setCosts] = useState<Costs | null>(null);
   const [mic, setMic] = useState<MicState>("idle");
+  const [speaker, setSpeaker] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    setSpeaker(localStorage.getItem("cerebro_speaker") !== "off");
+  }, []);
+
+  function toggleSpeaker() {
+    const next = !speaker;
+    setSpeaker(next);
+    localStorage.setItem("cerebro_speaker", next ? "on" : "off");
+    if (!next) audioRef.current?.pause();
+  }
+
+  async function speak(text: string) {
+    try {
+      const res = await fetch("/api/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return; // 503 = TTS não configurado; segue mudo
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      audioRef.current?.pause();
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch {
+      // autoplay bloqueado ou rede — falha silenciosa, o texto já está na tela
+    }
+  }
 
   useEffect(() => {
     fetch("/api/costs")
@@ -54,10 +87,12 @@ export default function ChatPage() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let fullResponse = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
+        fullResponse += chunk;
         setMessages((m) => {
           const copy = [...m];
           copy[copy.length - 1] = {
@@ -66,6 +101,10 @@ export default function ChatPage() {
           };
           return copy;
         });
+      }
+      // turno de voz → resposta falada (se o alto-falante estiver ligado)
+      if (modality === "voice" && speaker && fullResponse.trim()) {
+        speak(fullResponse);
       }
     } catch {
       setMessages((m) => {
@@ -141,6 +180,9 @@ export default function ChatPage() {
               ${costs.month_cad.toFixed(2)} / ${costs.budget_cad} CAD
             </span>
           )}
+          <button onClick={toggleSpeaker} title="Voz das respostas">
+            {speaker ? "🔊" : "🔇"}
+          </button>
           <Link href="/memory" className="underline underline-offset-2">
             memória
           </Link>
