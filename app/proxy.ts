@@ -14,6 +14,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Tudo, exceto login, assets do Next e arquivos estáticos
-  matcher: ["/((?!login|api/login|_next|favicon.ico|manifest.json|icon.*).*)"],
+  // Tudo, exceto login, webhook do Telegram (tem secret próprio), assets e estáticos
+  matcher: ["/((?!login|api/login|api/telegram|_next|favicon.ico|manifest.json|icon.*).*)"],
 };
