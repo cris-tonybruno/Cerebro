@@ -1,0 +1,14 @@
+# segredos — NUNCA subir
+.env
+.env.*
+!.env.example
+
+# dependências e builds
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# sistema
+.DS_Store
+Thumbs.db
