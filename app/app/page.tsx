@@ -23,20 +23,27 @@ export default function ChatPage() {
   const [costs, setCosts] = useState<Costs | null>(null);
   const [mic, setMic] = useState<MicState>("idle");
   const [speaker, setSpeaker] = useState(true);
+  const [speaking, setSpeaking] = useState(false);
+  const [recSeconds, setRecSeconds] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     setSpeaker(localStorage.getItem("cerebro_speaker") !== "off");
   }, []);
 
+  // Silenciar: corta a fala em curso NA HORA e desliga as próximas
   function toggleSpeaker() {
     const next = !speaker;
     setSpeaker(next);
     localStorage.setItem("cerebro_speaker", next ? "on" : "off");
-    if (!next) audioRef.current?.pause();
+    if (!next) {
+      audioRef.current?.pause();
+      setSpeaking(false);
+    }
   }
 
   async function speak(text: string) {
@@ -52,10 +59,16 @@ export default function ChatPage() {
       audioRef.current?.pause();
       const audio = new Audio(url);
       audioRef.current = audio;
-      audio.onended = () => URL.revokeObjectURL(url);
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        setSpeaking(false);
+      };
+      audio.onpause = () => setSpeaking(false);
+      setSpeaking(true);
       await audio.play();
     } catch {
       // autoplay bloqueado ou rede — falha silenciosa, o texto já está na tela
+      setSpeaking(false);
     }
   }
 
@@ -137,6 +150,7 @@ export default function ChatPage() {
       };
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        if (recTimerRef.current) clearInterval(recTimerRef.current);
         setMic("transcribing");
         try {
           const blob = new Blob(chunksRef.current, { type: "audio/webm" });
@@ -158,6 +172,8 @@ export default function ChatPage() {
       recorderRef.current = recorder;
       recorder.start();
       setMic("recording");
+      setRecSeconds(0);
+      recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
     } catch {
       alert("Não consegui acessar o microfone. Verifica a permissão do browser.");
     }
@@ -180,9 +196,6 @@ export default function ChatPage() {
               ${costs.month_cad.toFixed(2)} / ${costs.budget_cad} CAD
             </span>
           )}
-          <button onClick={toggleSpeaker} title="Voz das respostas">
-            {speaker ? "🔊" : "🔇"}
-          </button>
           <Link href="/memory" className="underline underline-offset-2">
             memória
           </Link>
@@ -222,16 +235,20 @@ export default function ChatPage() {
           <button
             onClick={toggleMic}
             disabled={sending}
-            title={mic === "recording" ? "Parar e enviar" : "Gravar áudio"}
-            className={`rounded-xl px-4 py-3 text-lg border transition-colors disabled:opacity-40 ${
+            title={mic === "recording" ? "Parar, transcrever e enviar" : "Gravar áudio"}
+            className={`rounded-xl px-4 py-3 text-lg border transition-colors disabled:opacity-40 min-w-[64px] ${
               mic === "recording"
-                ? "bg-red-600 border-red-500 animate-pulse"
+                ? "bg-red-600 border-red-500 animate-pulse font-mono text-sm"
                 : mic === "transcribing"
                   ? "bg-zinc-800 border-zinc-700 opacity-60"
                   : "bg-zinc-900 border-zinc-700"
             }`}
           >
-            {mic === "recording" ? "■" : mic === "transcribing" ? "…" : "🎤"}
+            {mic === "recording"
+              ? `■ ${Math.floor(recSeconds / 60)}:${String(recSeconds % 60).padStart(2, "0")}`
+              : mic === "transcribing"
+                ? "…"
+                : "🎤"}
           </button>
           <textarea
             value={input}
@@ -243,9 +260,34 @@ export default function ChatPage() {
               }
             }}
             rows={1}
-            placeholder={mic === "recording" ? "gravando… aperta ■ pra enviar" : "Escreve aqui…"}
+            placeholder={
+              mic === "recording"
+                ? "gravando… fala à vontade, aperta ■ quando terminar"
+                : mic === "transcribing"
+                  ? "transcrevendo…"
+                  : "Escreve aqui…"
+            }
             className="flex-1 resize-none rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 text-zinc-100 outline-none focus:border-zinc-500"
           />
+          <button
+            onClick={toggleSpeaker}
+            title={
+              speaking
+                ? "Calar agora"
+                : speaker
+                  ? "Voz ligada — toca pra silenciar"
+                  : "Voz desligada — toca pra ligar"
+            }
+            className={`rounded-xl px-4 py-3 text-lg border transition-colors ${
+              speaking
+                ? "bg-emerald-700 border-emerald-500 animate-pulse"
+                : speaker
+                  ? "bg-zinc-900 border-zinc-700"
+                  : "bg-zinc-900 border-zinc-800 opacity-50"
+            }`}
+          >
+            {speaker ? "🔊" : "🔇"}
+          </button>
           <button
             onClick={() => send(input)}
             disabled={sending || !input.trim()}
