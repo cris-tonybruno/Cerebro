@@ -118,6 +118,20 @@ export const toolDefs: Anthropic.Tool[] = [
     },
   },
   {
+    name: "recall_past",
+    description:
+      "Busca na memória de LONGO PRAZO do cérebro: conversas antigas com o Cris e pesquisas " +
+      "já arquivadas. Use quando o Cris perguntar 'o que a gente já falou sobre X', 'o que eu " +
+      "pesquisei sobre Y', 'quando eu te contei Z' — ou quando lembrar de algo antigo ajudar a resposta.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "O assunto a relembrar" },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "get_world_digest",
     description:
       "Consulta o panorama semanal do mundo (Canadá, Brasil, política global) que o cérebro " +
@@ -174,6 +188,9 @@ export async function executeTool(
         break;
       case "get_world_digest":
         result = await getLatestDigest();
+        break;
+      case "recall_past":
+        result = await recallPast(String(input.query ?? ""));
         break;
       case "place_save":
         result = await placeSave(input, ctx);
@@ -332,5 +349,63 @@ async function webSearch(input: Record<string, unknown>): Promise<string> {
       `- ${r.title} (${r.url}): ${r.content?.slice(0, 200)}`
     )
     .join("\n");
-  return `${json.answer ? `Resumo: ${json.answer}\n` : ""}Resultados:\n${results}`;
+  const full = `${json.answer ? `Resumo: ${json.answer}\n` : ""}Resultados:\n${results}`;
+
+  // Toda pesquisa vira arquivo permanente: curiosidade do Cris é dado da timeline
+  try {
+    const [embedding] = await embed([`${query}\n${full}`.slice(0, 8000)], "research_archive");
+    const { error } = await sb()
+      .from("research")
+      .insert({ query, result: full, tool: "web_search", embedding });
+    if (error) console.error("research insert:", error.message);
+  } catch (err) {
+    console.error("research archive:", err);
+  }
+
+  return full;
+}
+
+// Memória de longo prazo: conversas antigas + pesquisas arquivadas
+async function recallPast(query: string): Promise<string> {
+  if (!query.trim()) return "assunto vazio";
+  const [qEmbedding] = await embed([query], "recall");
+
+  const [turnsRes, researchRes] = await Promise.all([
+    sb().rpc("match_turns", { query_embedding: qEmbedding, match_count: 6 }),
+    sb().rpc("match_research", { query_embedding: qEmbedding, match_count: 3 }),
+  ]);
+
+  const turns = (turnsRes.data ?? []) as {
+    role: string;
+    content: string;
+    created_at: string;
+    similarity: number;
+  }[];
+  const research = (researchRes.data ?? []) as {
+    query: string;
+    result: string;
+    created_at: string;
+  }[];
+
+  const parts: string[] = [];
+  if (turns.length > 0) {
+    parts.push(
+      "CONVERSAS PASSADAS RELEVANTES:\n" +
+        turns
+          .map(
+            (t) =>
+              `[${String(t.created_at).slice(0, 10)}] ${t.role === "cris" ? "Cris" : "Cérebro"}: ${t.content.slice(0, 300)}`
+          )
+          .join("\n")
+    );
+  }
+  if (research.length > 0) {
+    parts.push(
+      "PESQUISAS ARQUIVADAS:\n" +
+        research
+          .map((r) => `[${String(r.created_at).slice(0, 10)}] busca "${r.query}": ${r.result.slice(0, 500)}`)
+          .join("\n\n")
+    );
+  }
+  return parts.length > 0 ? parts.join("\n\n") : "nada encontrado sobre isso na memória de longo prazo";
 }
