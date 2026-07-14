@@ -6,6 +6,7 @@ import Link from "next/link";
 type Msg = { role: "cris" | "brain"; content: string };
 type Costs = { month_cad: number; budget_cad: number; pct: number };
 type MicState = "idle" | "recording" | "transcribing";
+type Approval = { id: string; created_at: string; action: string; summary: string; status: string };
 
 function getSessionId(): string {
   let id = localStorage.getItem("cerebro_session");
@@ -84,12 +85,27 @@ export default function ChatPage() {
     }
   }
 
+  const [approvals, setApprovals] = useState<Approval[]>([]);
+
   useEffect(() => {
     fetch("/api/costs")
       .then((r) => (r.ok ? r.json() : null))
       .then(setCosts)
       .catch(() => {});
+    fetch("/api/approvals")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setApprovals((j?.approvals ?? []).filter((a: Approval) => a.status === "pending")))
+      .catch(() => {});
   }, [sending]);
+
+  async function decide(id: string, decision: "approved" | "denied") {
+    setApprovals((a) => a.filter((x) => x.id !== id));
+    await fetch("/api/approvals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, decision }),
+    }).catch(() => {});
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -220,6 +236,9 @@ export default function ChatPage() {
           <Link href="/council" className="underline underline-offset-2">
             conselho
           </Link>
+          <Link href="/audit" className="underline underline-offset-2">
+            audit
+          </Link>
           <a href="/api/export?format=json" className="underline underline-offset-2">
             export
           </a>
@@ -250,6 +269,36 @@ export default function ChatPage() {
         ))}
         <div ref={bottomRef} />
       </main>
+
+      {approvals.length > 0 && (
+        <div className="px-4 pb-2 space-y-2">
+          {approvals.map((a) => (
+            <div
+              key={a.id}
+              className="rounded-xl border-2 border-amber-500 bg-amber-950/40 p-3 space-y-2"
+            >
+              <p className="text-xs font-bold text-amber-400 tracking-wide">
+                ✋ APROVAÇÃO NECESSÁRIA
+              </p>
+              <p className="text-sm">{a.summary}</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => decide(a.id, "approved")}
+                  className="flex-1 rounded-lg bg-emerald-600 text-white py-2 text-sm font-semibold"
+                >
+                  Aprovar
+                </button>
+                <button
+                  onClick={() => decide(a.id, "denied")}
+                  className="flex-1 rounded-lg bg-zinc-800 border border-zinc-600 py-2 text-sm"
+                >
+                  Negar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <footer className="px-4 pb-4 pt-2 border-t border-zinc-800">
         <div className="flex gap-2 items-end">

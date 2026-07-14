@@ -244,11 +244,36 @@ export const toolDefs: Anthropic.Tool[] = [
   },
 ];
 
+// Ferramentas SENSÍVEIS exigem aprovação explícita do Cris antes de executar
+// (M8 — princípio de ouro: a IA prepara, o Cris aprova). Hoje vazio: nenhuma
+// ferramenta atual toca terceiros/dinheiro. Gmail, mensagens e compras (M9+)
+// entram aqui no dia em que existirem.
+const SENSITIVE_TOOLS = new Set<string>([]);
+
 export async function executeTool(
   name: string,
   input: Record<string, unknown>,
-  ctx: ToolContext = {}
+  ctx: ToolContext = {},
+  approvedByCris = false
 ): Promise<string> {
+  // Cancela de aprovação: sensível e ainda sem aval → vira card pendente
+  if (SENSITIVE_TOOLS.has(name) && !approvedByCris) {
+    const { data, error } = await sb()
+      .from("approvals")
+      .insert({
+        action: `tool:${name}`,
+        summary: `Executar ${name} com: ${JSON.stringify(input).slice(0, 300)}`,
+        detail: { tool: name, input, ctx: { geo: ctx.geo, place: ctx.place } },
+      })
+      .select("id")
+      .single();
+    if (error) return `falha ao criar card de aprovação: ${error.message}`;
+    return (
+      `AÇÃO SENSÍVEL PREPARADA, aguardando aprovação do Cris (card ${data.id.slice(0, 8)}). ` +
+      `Avise o Cris que o card apareceu no app e nada acontece sem o toque dele.`
+    );
+  }
+
   let result: string;
   try {
     switch (name) {

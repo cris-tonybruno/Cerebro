@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE, expectedToken } from "@/lib/auth";
+import { getSystemState } from "@/lib/security";
 
 export async function POST(req: Request) {
   const { password } = await req.json();
   if (!process.env.APP_PASSWORD || password !== process.env.APP_PASSWORD) {
     return Response.json({ error: "senha incorreta" }, { status: 401 });
   }
+  const state = await getSystemState();
+  if (state.lockdown) {
+    return Response.json({ error: "blackout ativo" }, { status: 503 });
+  }
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(AUTH_COOKIE, await expectedToken(), {
+  res.cookies.set(AUTH_COOKIE, await expectedToken(state.auth_epoch), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

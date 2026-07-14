@@ -1,5 +1,5 @@
-// Auth M1: senha única (APP_PASSWORD) → cookie com SHA-256 da senha.
-// Suficiente para um app pessoal de usuário único; Supabase Auth entra depois se precisar.
+// Auth M1+M8: senha única (APP_PASSWORD) → cookie com SHA-256 amarrado à ÉPOCA.
+// Blackout bumpa a época → todos os cookies vivos morrem na hora.
 
 export const AUTH_COOKIE = "cerebro_auth";
 
@@ -11,6 +11,6 @@ export async function sha256Hex(text: string): Promise<string> {
     .join("");
 }
 
-export async function expectedToken(): Promise<string> {
-  return sha256Hex(`cerebro:${process.env.APP_PASSWORD}`);
+export async function expectedToken(epoch: number): Promise<string> {
+  return sha256Hex(`cerebro:${process.env.APP_PASSWORD}:${epoch}`);
 }
