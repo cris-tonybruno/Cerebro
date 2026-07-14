@@ -3,6 +3,7 @@ import { runTurn } from "@/lib/brain";
 import { transcribe } from "@/lib/stt";
 import { synthesize } from "@/lib/tts";
 import { resolvePlace, updateCurrentLocation } from "@/lib/geo";
+import { describeImage, extractDoc, storeFile } from "@/lib/media";
 
 // M2.5 — Corpo provisório: bot do Telegram ligado no mesmo cérebro.
 // Segurança: (1) secret token do webhook no header, (2) só responde ao chat do Cris.
@@ -27,7 +28,7 @@ async function tg(method: string, payload: Record<string, unknown>) {
   return res;
 }
 
-async function downloadVoice(fileId: string): Promise<Blob | null> {
+async function downloadFile(fileId: string): Promise<Blob | null> {
   const meta = await fetch(`${TG()}/getFile`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -42,6 +43,11 @@ async function downloadVoice(fileId: string): Promise<Blob | null> {
   );
   if (!file.ok) return null;
   return await file.blob();
+}
+
+function datedPath(ext: string): string {
+  const d = new Date();
+  return `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${Date.now()}.${ext}`;
 }
 
 export async function POST(req: Request) {
@@ -82,13 +88,14 @@ export async function POST(req: Request) {
     return Response.json({ ok: true });
   }
 
-  // Extrai o texto: mensagem escrita ou nota de voz transcrita
+  // Extrai o conteúdo: texto, nota de voz, foto ou documento
   let text: string | null = msg.text ?? null;
-  let modality: "text" | "voice" = "text";
+  let modality: "text" | "voice" | "image" | "doc" = "text";
+  let attachmentPath: string | null = null;
 
   if (!text && msg.voice?.file_id) {
     modality = "voice";
-    const blob = await downloadVoice(msg.voice.file_id);
+    const blob = await downloadFile(msg.voice.file_id);
     if (blob) {
       try {
         text = await transcribe(blob, "voice.oga");
@@ -102,10 +109,52 @@ export async function POST(req: Request) {
     }
   }
 
+  // Foto → guarda no cofre + o cérebro VÊ a imagem (M7)
+  if (!text && Array.isArray(msg.photo) && msg.photo.length > 0) {
+    modality = "image";
+    await tg("sendChatAction", { chat_id: chatId, action: "typing" });
+    const largest = msg.photo[msg.photo.length - 1]; // maior resolução
+    const blob = await downloadFile(largest.file_id);
+    if (!blob) {
+      await tg("sendMessage", { chat_id: chatId, text: "Não consegui baixar a foto 🤔" });
+      return Response.json({ ok: true });
+    }
+    const bytes = Buffer.from(await blob.arrayBuffer());
+    attachmentPath = await storeFile("photos", datedPath("jpg"), bytes, "image/jpeg");
+    const description = await describeImage(bytes, "image/jpeg");
+    const caption = (msg.caption ?? "").trim();
+    text =
+      (caption ? `${caption}\n\n` : "") +
+      `[FOTO enviada pelo Cris — o que você vê nela]: ${description}`;
+  }
+
+  // Documento (PDF/texto) → guarda + extrai o essencial (M7)
+  if (!text && msg.document?.file_id) {
+    modality = "doc";
+    await tg("sendChatAction", { chat_id: chatId, action: "typing" });
+    const doc = msg.document;
+    const blob = await downloadFile(doc.file_id);
+    if (!blob) {
+      await tg("sendMessage", { chat_id: chatId, text: "Não consegui baixar o documento 🤔" });
+      return Response.json({ ok: true });
+    }
+    const bytes = Buffer.from(await blob.arrayBuffer());
+    const ext = (doc.file_name ?? "arquivo").split(".").pop() ?? "bin";
+    attachmentPath = await storeFile(
+      "docs",
+      datedPath(ext),
+      bytes,
+      doc.mime_type ?? "application/octet-stream"
+    );
+    const extraction = await extractDoc(bytes, doc.mime_type ?? "", doc.file_name ?? "arquivo");
+    const caption = (msg.caption ?? "").trim();
+    text = (caption ? `${caption}\n\n` : "") + `[DOCUMENTO enviado pelo Cris]: ${extraction}`;
+  }
+
   if (!text) {
     await tg("sendMessage", {
       chat_id: chatId,
-      text: "Por enquanto eu entendo texto e nota de voz. Foto e documento chegam no M7. 🧠",
+      text: "Eu entendo texto, nota de voz, foto e documento (PDF/texto). O que chegou aí eu ainda não sei ler. 🧠",
     });
     return Response.json({ ok: true });
   }
@@ -127,7 +176,8 @@ export async function POST(req: Request) {
     modality,
     undefined,
     null,
-    "telegram"
+    "telegram",
+    attachmentPath
   );
   await tg("sendMessage", { chat_id: chatId, text: answer });
 

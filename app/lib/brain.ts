@@ -120,10 +120,11 @@ const MAX_TOOL_ROUNDS = 4;
 export async function runTurn(
   message: string,
   session_id: string,
-  modality: "text" | "voice" = "text",
+  modality: "text" | "voice" | "image" | "doc" = "text",
   onDelta?: (text: string) => void,
   geo?: Geo | null,
-  source: string = "pwa"
+  source: string = "pwa",
+  attachmentPath?: string | null
 ): Promise<TurnResult> {
   const ctx = await getContext(message, session_id, geo, source);
   const toolCtx: ToolContext = { geo: ctx.geo, place: ctx.place, project: ctx.project };
@@ -199,7 +200,8 @@ export async function runTurn(
     modality,
     route,
     toolsUsed[0] ?? null,
-    ctx
+    ctx,
+    attachmentPath ?? null
   );
 
   return { text: fullText, route, toolsUsed };
@@ -224,7 +226,8 @@ export async function persistTurn(
   modality: string = "text",
   route: string = "direct",
   toolName: string | null = null,
-  turnCtx?: Pick<TurnContext, "geo" | "place" | "activeProtocols" | "project">
+  turnCtx?: Pick<TurnContext, "geo" | "place" | "activeProtocols" | "project">,
+  attachmentPath: string | null = null
 ) {
   const now = new Date().toISOString();
   const extraction = await extractMemories(message, responseText);
@@ -252,6 +255,7 @@ export async function persistTurn(
       timezone: TZ,
       zone,
       embedding: msgEmbedding,
+      attachment_path: attachmentPath,
       ...geoCols,
     })
     .select("id")
