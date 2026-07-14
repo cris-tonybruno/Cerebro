@@ -8,12 +8,31 @@ export type RetrievedMemory = {
   similarity: number;
 };
 
-export function buildSystemPrompt(memories: RetrievedMemory[]): string {
+export type PromptContext = {
+  place?: string | null;
+  geo?: { lat: number; lng: number } | null;
+  protocolPrompts?: string[];
+};
+
+export function buildSystemPrompt(memories: RetrievedMemory[], ctx: PromptContext = {}): string {
   const now = new Date().toLocaleString("pt-BR", {
     timeZone: "America/Toronto",
     dateStyle: "full",
     timeStyle: "short",
   });
+
+  const whereBlock = ctx.place
+    ? `ONDE O CRIS ESTÁ AGORA: ${ctx.place}${ctx.geo ? ` (${ctx.geo.lat.toFixed(4)}, ${ctx.geo.lng.toFixed(4)})` : ""}
+Use a localização quando fizer diferença — clima é DESSE ponto, rotas partem daqui,
+e sugestões podem considerar o lugar ("você tá na faculdade, quer que eu deixe isso pra à noite?").`
+    : ctx.geo
+      ? `ONDE O CRIS ESTÁ AGORA: lat ${ctx.geo.lat.toFixed(4)}, lng ${ctx.geo.lng.toFixed(4)} (lugar sem nome ainda)`
+      : "LOCALIZAÇÃO: desconhecida neste turno.";
+
+  const protocolBlock =
+    (ctx.protocolPrompts ?? []).length > 0
+      ? `\n${ctx.protocolPrompts!.join("\n")}\n`
+      : "";
 
   const memoryBlock =
     memories.length > 0
@@ -49,6 +68,10 @@ ROTEAMENTO (você decide a rota de cada pedido):
   dados crus. Links (mapas etc.) devem aparecer por extenso na resposta.
 
 AGORA: ${now} (Ottawa)
+${whereBlock}
+${protocolBlock}
+PROTOCOLOS: o Cris pode ativar/desativar por voz ("ativar protocolo obra") → use protocol_toggle.
+Disponíveis: foco, obra, casa, madrugada. Pode marcar lugares ("marca esse lugar como casa") → place_save.
 
 MEMÓRIAS RELEVANTES:
 ${memoryBlock}`;

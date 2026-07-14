@@ -3,7 +3,9 @@ import { sb } from "./supabase";
 import { embed } from "./embeddings";
 import { logUsage } from "./costs";
 import { buildSystemPrompt, RetrievedMemory } from "./principal";
-import { toolDefs, executeTool } from "./tools";
+import { toolDefs, executeTool, ToolContext } from "./tools";
+import { Geo, resolvePlace, updateCurrentLocation, getCurrentLocation } from "./geo";
+import { getActiveProtocols } from "./protocols";
 
 // O miolo do cérebro, compartilhado entre as bocas (PWA streaming, Telegram, futuras).
 // M3: loop agêntico — o Principal decide entre responder direto ou usar ferramentas.
@@ -19,35 +21,65 @@ export type TurnContext = {
   memories: RetrievedMemory[];
   history: Anthropic.MessageParam[];
   system: string;
+  geo: Geo | null;
+  place: string | null;
+  activeProtocols: string[];
 };
 
-export async function getContext(message: string, session_id: string): Promise<TurnContext> {
+export async function getContext(
+  message: string,
+  session_id: string,
+  geoIn?: Geo | null,
+  source: string = "pwa"
+): Promise<TurnContext> {
   const [msgEmbedding] = await embed([message], "chat_query");
 
-  const { data: memories } = await sb().rpc("match_memories", {
-    query_embedding: msgEmbedding,
-    match_count: 8,
-  });
+  // Localização: a do turno (PWA) ou a última conhecida (Telegram e afins).
+  // Posição fresca > 30 min é melhor que nada, mas o prompt deixa claro que é a última vista.
+  let geo: Geo | null = geoIn ?? null;
+  let place: string | null = null;
+  if (geo) {
+    place = await resolvePlace(geo);
+    await updateCurrentLocation(geo, source, place);
+  } else {
+    const last = await getCurrentLocation();
+    if (last) {
+      geo = { lat: last.lat, lng: last.lng };
+      place = last.place_label ?? (await resolvePlace(geo));
+    }
+  }
 
-  const { data: recentTurns } = await sb()
-    .from("turns")
-    .select("role, content")
-    .eq("session_id", session_id)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  const [memoriesRes, turnsRes, protocols] = await Promise.all([
+    sb().rpc("match_memories", { query_embedding: msgEmbedding, match_count: 8 }),
+    sb()
+      .from("turns")
+      .select("role, content")
+      .eq("session_id", session_id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    getActiveProtocols(),
+  ]);
 
-  const history: Anthropic.MessageParam[] = (recentTurns ?? [])
+  const history: Anthropic.MessageParam[] = (turnsRes.data ?? [])
     .reverse()
     .map((t) => ({
       role: t.role === "cris" ? ("user" as const) : ("assistant" as const),
       content: t.content,
     }));
 
+  const memories = (memoriesRes.data ?? []) as RetrievedMemory[];
   return {
     msgEmbedding,
-    memories: (memories ?? []) as RetrievedMemory[],
+    memories,
     history,
-    system: buildSystemPrompt((memories ?? []) as RetrievedMemory[]),
+    geo,
+    place,
+    activeProtocols: protocols.map((p) => p.name),
+    system: buildSystemPrompt(memories, {
+      geo,
+      place,
+      protocolPrompts: protocols.map((p) => p.config?.prompt).filter(Boolean) as string[],
+    }),
   };
 }
 
@@ -65,9 +97,12 @@ export async function runTurn(
   message: string,
   session_id: string,
   modality: "text" | "voice" = "text",
-  onDelta?: (text: string) => void
+  onDelta?: (text: string) => void,
+  geo?: Geo | null,
+  source: string = "pwa"
 ): Promise<TurnResult> {
-  const ctx = await getContext(message, session_id);
+  const ctx = await getContext(message, session_id, geo, source);
+  const toolCtx: ToolContext = { geo: ctx.geo, place: ctx.place };
 
   const messages: Anthropic.MessageParam[] = [
     ...ctx.history,
@@ -108,7 +143,7 @@ export async function runTurn(
     for (const block of final.content) {
       if (block.type === "tool_use") {
         toolsUsed.push(block.name);
-        const result = await executeTool(block.name, block.input as Record<string, unknown>);
+        const result = await executeTool(block.name, block.input as Record<string, unknown>, toolCtx);
         toolResults.push({
           type: "tool_result",
           tool_use_id: block.id,
@@ -139,7 +174,8 @@ export async function runTurn(
     ctx.memories,
     modality,
     route,
-    toolsUsed[0] ?? null
+    toolsUsed[0] ?? null,
+    ctx
   );
 
   return { text: fullText, route, toolsUsed };
@@ -163,11 +199,18 @@ export async function persistTurn(
   retrievedMemories: RetrievedMemory[],
   modality: string = "text",
   route: string = "direct",
-  toolName: string | null = null
+  toolName: string | null = null,
+  turnCtx?: Pick<TurnContext, "geo" | "place" | "activeProtocols">
 ) {
   const now = new Date().toISOString();
   const extraction = await extractMemories(message, responseText);
   const zone = extraction?.turn_zone ?? "negocios";
+  const geoCols = {
+    lat: turnCtx?.geo?.lat ?? null,
+    lng: turnCtx?.geo?.lng ?? null,
+    place_label: turnCtx?.place ?? null,
+    active_protocols: turnCtx?.activeProtocols?.length ? turnCtx.activeProtocols : null,
+  };
 
   const [respEmbedding] = await embed([responseText.slice(0, 8000)], "chat_persist");
 
@@ -184,6 +227,7 @@ export async function persistTurn(
       timezone: TZ,
       zone,
       embedding: msgEmbedding,
+      ...geoCols,
     })
     .select("id")
     .single();
@@ -200,6 +244,7 @@ export async function persistTurn(
     timezone: TZ,
     zone,
     embedding: respEmbedding,
+    ...geoCols,
   });
   if (brainErr) console.error("insert brain turn:", brainErr.message);
 

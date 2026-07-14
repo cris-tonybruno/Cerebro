@@ -2,6 +2,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { sb } from "./supabase";
 import { embed } from "./embeddings";
 import { runCouncil } from "./council";
+import { Geo, resolvePlace } from "./geo";
+import { toggleProtocol } from "./protocols";
+
+export type ToolContext = { geo?: Geo | null; place?: string | null };
 
 // M3 — Ferramentas do roteador (rota B da diretiva §3.3).
 // Todas as execuções entram no audit_log.
@@ -33,17 +37,49 @@ export const toolDefs: Anthropic.Tool[] = [
   {
     name: "get_weather",
     description:
-      "Consulta o clima atual e a previsão de 3 dias para uma cidade. " +
-      "Use quando o Cris perguntar sobre tempo, clima, chuva, temperatura ou condições para trabalhar na obra.",
+      "Consulta o clima: condição atual, NOWCAST de chuva dos próximos 120 minutos no ponto exato " +
+      "(radar — diz se a chuva vai pegar ONDE a pessoa está, não na cidade em geral) e previsão de 3 dias. " +
+      "Sem 'city', usa a posição atual do Cris (GPS) — que é quase sempre o que ele quer. " +
+      "Use quando o Cris perguntar sobre tempo, chuva, temperatura ou condições para trabalhar na obra.",
     input_schema: {
       type: "object",
       properties: {
         city: {
           type: "string",
-          description: "Cidade (default: Ottawa). Ex: 'Ottawa', 'Toronto', 'São Paulo'",
+          description:
+            "Só preencha se o Cris pediu OUTRO lugar explicitamente. Vazio = posição atual dele.",
         },
       },
       required: [],
+    },
+  },
+  {
+    name: "place_save",
+    description:
+      "Marca a posição ATUAL do Cris como um lugar conhecido com nome pessoal. " +
+      "Use quando ele disser 'marca esse lugar como X' / 'salva esse lugar' / 'esse é o canteiro Y'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nome pessoal do lugar. Ex: 'casa', 'Algonquin', 'obra da Innovation'" },
+        radius_m: { type: "number", description: "Raio em metros (default 250; use 100 pra endereços, 500 pra canteiros grandes)" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "protocol_toggle",
+    description:
+      "Ativa ou desativa um protocolo de comportamento: foco, obra, casa, madrugada. " +
+      "Use quando o Cris disser 'ativar protocolo X' / 'desativar protocolo X' / 'modo obra' etc. " +
+      "O efeito começa no PRÓXIMO turno.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nome do protocolo" },
+        active: { type: "boolean", description: "true = ativar, false = desativar" },
+      },
+      required: ["name", "active"],
     },
   },
   {
@@ -104,7 +140,8 @@ export const toolDefs: Anthropic.Tool[] = [
 
 export async function executeTool(
   name: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  ctx: ToolContext = {}
 ): Promise<string> {
   let result: string;
   try {
@@ -113,7 +150,7 @@ export async function executeTool(
         result = await noteSave(input);
         break;
       case "get_weather":
-        result = await getWeather(input);
+        result = await getWeather(input, ctx);
         break;
       case "maps_route":
         result = mapsRoute(input);
@@ -123,6 +160,12 @@ export async function executeTool(
         break;
       case "convene_council":
         result = await runCouncil(String(input.question ?? ""));
+        break;
+      case "place_save":
+        result = await placeSave(input, ctx);
+        break;
+      case "protocol_toggle":
+        result = await toggleProtocol(String(input.name ?? ""), Boolean(input.active));
         break;
       default:
         result = `ferramenta desconhecida: ${name}`;
@@ -168,25 +211,52 @@ const WEATHER_CODES: Record<number, string> = {
   95: "tempestade", 96: "tempestade com granizo", 99: "tempestade forte com granizo",
 };
 
-async function getWeather(input: Record<string, unknown>): Promise<string> {
-  const city = String(input.city ?? "Ottawa");
+async function getWeather(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
+  const cityAsked = String(input.city ?? "").trim();
 
-  const geoRes = await fetch(
-    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=pt`
-  );
-  const geo = await geoRes.json();
-  const place = geo.results?.[0];
-  if (!place) return `cidade não encontrada: ${city}`;
+  // Prioridade do Cris: o clima é do PONTO onde ele está, não da cidade inteira
+  let lat: number, lng: number, placeName: string;
+  if (!cityAsked && ctx.geo) {
+    lat = ctx.geo.lat;
+    lng = ctx.geo.lng;
+    placeName = ctx.place ?? "onde você está";
+  } else {
+    const city = cityAsked || "Ottawa";
+    const geoRes = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=pt`
+    );
+    const geo = await geoRes.json();
+    const found = geo.results?.[0];
+    if (!found) return `cidade não encontrada: ${city}`;
+    lat = found.latitude;
+    lng = found.longitude;
+    placeName = `${found.name}${found.country ? ` (${found.country})` : ""}`;
+  }
 
   const wRes = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}` +
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
       `&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m` +
+      `&minutely_15=precipitation&forecast_minutely_15=8` +
       `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code` +
       `&timezone=auto&forecast_days=3`
   );
   const w = await wRes.json();
   const c = w.current;
   const d = w.daily;
+
+  // Nowcast: chuva nos próximos 120 min NESTE ponto (o "mapa da nuvem" do carpinteiro)
+  let nowcast = "sem chuva prevista nos próximos 120 min neste ponto";
+  const m15: number[] = w.minutely_15?.precipitation ?? [];
+  const firstRain = m15.findIndex((p) => p > 0.1);
+  if (firstRain >= 0) {
+    const startMin = firstRain * 15;
+    const lastRain = m15.reduce((acc, p, i) => (p > 0.1 ? i : acc), firstRain);
+    const endMin = (lastRain + 1) * 15;
+    nowcast =
+      startMin === 0
+        ? `CHOVENDO AGORA neste ponto (deve seguir até ~${endMin} min)`
+        : `chuva chegando NESTE ponto em ~${startMin} min (até ~${endMin} min)`;
+  }
 
   const days = (d?.time ?? []).map(
     (t: string, i: number) =>
@@ -195,10 +265,25 @@ async function getWeather(input: Record<string, unknown>): Promise<string> {
   );
 
   return (
-    `Clima em ${place.name} (${place.country ?? ""}): agora ${c.temperature_2m}°C ` +
+    `Clima em ${placeName}: agora ${c.temperature_2m}°C ` +
     `(sensação ${c.apparent_temperature}°C), ${WEATHER_CODES[c.weather_code] ?? "?"}, ` +
-    `vento ${c.wind_speed_10m} km/h.\nPróximos dias:\n${days.join("\n")}`
+    `vento ${c.wind_speed_10m} km/h.\nRadar local (120 min): ${nowcast}.\nPróximos dias:\n${days.join("\n")}`
   );
+}
+
+async function placeSave(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
+  const name = String(input.name ?? "").trim();
+  if (!name) return "nome do lugar vazio";
+  if (!ctx.geo) return "não sei onde o Cris está agora — sem GPS neste turno, não dá pra marcar o lugar";
+  const radius = Number(input.radius_m) > 0 ? Number(input.radius_m) : 250;
+  const { error } = await sb().from("known_places").insert({
+    name,
+    lat: ctx.geo.lat,
+    lng: ctx.geo.lng,
+    radius_m: radius,
+  });
+  if (error) return `falha ao marcar lugar: ${error.message}`;
+  return `lugar "${name}" marcado aqui (raio ${radius}m). A partir de agora eu sei quando o Cris está em "${name}".`;
 }
 
 function mapsRoute(input: Record<string, unknown>): string {

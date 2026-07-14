@@ -30,9 +30,21 @@ export default function ChatPage() {
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const geoRef = useRef<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     setSpeaker(localStorage.getItem("cerebro_speaker") !== "off");
+    // GPS é constante nos movimentos do Cérebro (M5): acompanha a posição em background
+    if ("geolocation" in navigator) {
+      const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          geoRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        },
+        () => {}, // permissão negada → segue sem GPS, sem drama
+        { enableHighAccuracy: false, maximumAge: 120000, timeout: 15000 }
+      );
+      return () => navigator.geolocation.clearWatch(watchId);
+    }
   }, []);
 
   // Silenciar: corta a fala em curso NA HORA e desliga as próximas
@@ -94,7 +106,13 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed, session_id: getSessionId(), modality }),
+        body: JSON.stringify({
+          message: trimmed,
+          session_id: getSessionId(),
+          modality,
+          lat: geoRef.current?.lat,
+          lng: geoRef.current?.lng,
+        }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 

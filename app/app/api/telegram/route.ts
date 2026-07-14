@@ -1,7 +1,8 @@
 import { createHash } from "crypto";
-import { answerOnce } from "@/lib/brain";
+import { runTurn } from "@/lib/brain";
 import { transcribe } from "@/lib/stt";
 import { synthesize } from "@/lib/tts";
+import { resolvePlace, updateCurrentLocation } from "@/lib/geo";
 
 // M2.5 — Corpo provisório: bot do Telegram ligado no mesmo cérebro.
 // Segurança: (1) secret token do webhook no header, (2) só responde ao chat do Cris.
@@ -69,6 +70,18 @@ export async function POST(req: Request) {
     return Response.json({ ok: true }); // estranhos falam com o vazio
   }
 
+  // Localização compartilhada → vira a posição atual do Cris (M5)
+  if (msg.location?.latitude) {
+    const geo = { lat: msg.location.latitude, lng: msg.location.longitude };
+    const label = await resolvePlace(geo);
+    await updateCurrentLocation(geo, "telegram", label);
+    await tg("sendMessage", {
+      chat_id: chatId,
+      text: `📍 Posição atualizada${label ? `: ${label}` : ""}. Agora clima, rotas e contexto partem daqui.`,
+    });
+    return Response.json({ ok: true });
+  }
+
   // Extrai o texto: mensagem escrita ou nota de voz transcrita
   let text: string | null = msg.text ?? null;
   let modality: "text" | "voice" = "text";
@@ -107,7 +120,15 @@ export async function POST(req: Request) {
 
   await tg("sendChatAction", { chat_id: chatId, action: "typing" });
 
-  const answer = await answerOnce(text, sessionIdForChat(chatId), modality);
+  // Sem GPS próprio: usa a última posição conhecida (getContext resolve isso)
+  const { text: answer } = await runTurn(
+    text,
+    sessionIdForChat(chatId),
+    modality,
+    undefined,
+    null,
+    "telegram"
+  );
   await tg("sendMessage", { chat_id: chatId, text: answer });
 
   // Entrou por voz → responde em áudio também (mesma regra da PWA)
