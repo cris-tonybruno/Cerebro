@@ -70,6 +70,21 @@ Migrations vivem AQUI, em `supabase/migrations/` — não em `onsite-core-db`.
   Claude Principal + memória write/read com zonas + Memory Browser + botão export + contador
   de custo. Sem voz, sem conselho, sem polimento — deliberadamente feio.
 
+## Regra da Oficina (dev_backlog)
+
+O Cérebro NÃO edita o próprio código. Quando o Cris sugere melhoria/recurso/correção sobre o
+próprio sistema (em qualquer boca), o Principal registra um **chamado** na tabela `dev_backlog`
+(ferramenta `dev_request`). **Toda sessão de trabalho neste repo DEVE começar consultando os
+chamados pendentes** e apresentá-los ao Cris:
+
+```sql
+select id, created_at, request, context from dev_backlog where status = 'pending' order by created_at;
+```
+
+Ao construir um chamado: status → `building` → `built` com `resolution` = commit. Rejeitado
+pelo Cris → `rejected` com o porquê. É o `chamado_dev` de Éon generalizado: pedido registrado,
+decisão humana, execução na oficina.
+
 ## Regra do Eu Virtual (deliberações do conselho)
 
 Existe um **perfil curado do Cris** (`creator_profile` no banco, editável por voz via

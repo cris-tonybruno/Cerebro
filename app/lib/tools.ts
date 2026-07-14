@@ -177,6 +177,29 @@ export const toolDefs: Anthropic.Tool[] = [
     },
   },
   {
+    name: "dev_request",
+    description:
+      "Registra um CHAMADO DE DESENVOLVIMENTO: melhoria, recurso novo ou correção sobre o PRÓPRIO " +
+      "Cérebro (este sistema). Use SEMPRE que o Cris sugerir/pedir algo que exige mudança no código " +
+      "do Cérebro ('o cérebro devia fazer X', 'seria bom se você conseguisse Y', reclamação de algo " +
+      "quebrado). A oficina (Claude Code, no VSCode) lê este backlog no início de toda sessão de " +
+      "trabalho e constrói com o Cris. Confirme em uma frase que o chamado foi registrado para a oficina.",
+    input_schema: {
+      type: "object",
+      properties: {
+        request: {
+          type: "string",
+          description: "O pedido completo, com o PORQUÊ (a dor que motiva). Autossuficiente.",
+        },
+        context: {
+          type: "string",
+          description: "Contexto útil: onde o Cris estava, o que disparou a ideia",
+        },
+      },
+      required: ["request"],
+    },
+  },
+  {
     name: "profile_get",
     description:
       "Lê o EU VIRTUAL — o perfil curado do Cris que representa ele em toda deliberação do conselho " +
@@ -339,6 +362,16 @@ export async function executeTool(
       case "project_notes_update":
         result = await updateProjectNotes(String(input.notes ?? ""));
         break;
+      case "dev_request": {
+        const { error: devErr } = await sb().from("dev_backlog").insert({
+          request: String(input.request ?? ""),
+          context: (input.context as string) ?? ctx.place ?? null,
+        });
+        result = devErr
+          ? `falha ao registrar chamado: ${devErr.message}`
+          : "chamado de desenvolvimento registrado — a oficina vê na próxima sessão";
+        break;
+      }
       case "profile_get": {
         const p = await getProfile();
         result = p ? `[versão ${p.version}]\n${p.content}` : "perfil ainda não criado";
