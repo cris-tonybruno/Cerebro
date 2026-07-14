@@ -5,8 +5,13 @@ import { runCouncil } from "./council";
 import { Geo, resolvePlace } from "./geo";
 import { toggleProtocol } from "./protocols";
 import { getLatestDigest } from "./digest";
+import { openProject, closeProject, projectStatus, updateProjectNotes, Project } from "./projects";
 
-export type ToolContext = { geo?: Geo | null; place?: string | null };
+export type ToolContext = {
+  geo?: Geo | null;
+  place?: string | null;
+  project?: Project | null;
+};
 
 // M3 — Ferramentas do roteador (rota B da diretiva §3.3).
 // Todas as execuções entram no audit_log.
@@ -118,6 +123,57 @@ export const toolDefs: Anthropic.Tool[] = [
     },
   },
   {
+    name: "project_open",
+    description:
+      "Abre (ou cria) um projeto e ativa o Modo Projeto: os turnos passam a ser linkados a ele " +
+      "e o cérebro vira parceiro do projeto. Use quando o Cris disser 'abrir projeto X' / " +
+      "'vamos trabalhar no X' / 'novo projeto X'. Só um projeto em foco por vez.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nome do projeto. Ex: 'Éon', 'Yoinkr', 'IMD final'" },
+        kind: {
+          type: "string",
+          enum: ["book", "app", "site", "client", "study"],
+          description: "Tipo (se der pra inferir)",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "project_close",
+    description: "Fecha o projeto em foco (sai do Modo Projeto). Use quando o Cris disser 'fechar projeto'.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "project_status",
+    description:
+      "Resumo do estado de um projeto: notas, últimas conversas, onde parou. " +
+      "Use quando o Cris perguntar 'onde a gente parou no X?' / 'status do projeto' / 'que projetos eu tenho?'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nome do projeto (vazio = o que está em foco / lista todos)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "project_notes_update",
+    description:
+      "Atualiza as notas do projeto em foco — o resumo vivo de decisões e fios abertos. " +
+      "Use quando uma decisão importante do projeto for tomada na conversa, reescrevendo as notas " +
+      "completas (decisões + próximos passos), de forma curta e legível.",
+    input_schema: {
+      type: "object",
+      properties: {
+        notes: { type: "string", description: "As notas completas novas (substituem as antigas)" },
+      },
+      required: ["notes"],
+    },
+  },
+  {
     name: "recall_past",
     description:
       "Busca na memória de LONGO PRAZO do cérebro: conversas antigas com o Cris e pesquisas " +
@@ -183,14 +239,31 @@ export async function executeTool(
       case "web_search":
         result = await webSearch(input);
         break;
-      case "convene_council":
-        result = await runCouncil(String(input.question ?? ""));
+      case "convene_council": {
+        // Modo Projeto: o conselho recebe o briefing do projeto junto (diretiva §9)
+        const brief = ctx.project
+          ? `[Contexto: a questão é do projeto "${ctx.project.name}"${ctx.project.kind ? ` (${ctx.project.kind})` : ""}. Notas do projeto: ${ctx.project.notes ?? "sem notas"}]\n\n`
+          : "";
+        result = await runCouncil(brief + String(input.question ?? ""));
         break;
+      }
       case "get_world_digest":
         result = await getLatestDigest();
         break;
       case "recall_past":
         result = await recallPast(String(input.query ?? ""));
+        break;
+      case "project_open":
+        result = await openProject(String(input.name ?? ""), input.kind as string | undefined);
+        break;
+      case "project_close":
+        result = await closeProject();
+        break;
+      case "project_status":
+        result = await projectStatus(input.name as string | undefined);
+        break;
+      case "project_notes_update":
+        result = await updateProjectNotes(String(input.notes ?? ""));
         break;
       case "place_save":
         result = await placeSave(input, ctx);

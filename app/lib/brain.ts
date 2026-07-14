@@ -6,6 +6,7 @@ import { buildSystemPrompt, RetrievedMemory } from "./principal";
 import { toolDefs, executeTool, ToolContext } from "./tools";
 import { Geo, resolvePlace, updateCurrentLocation, getCurrentLocation } from "./geo";
 import { getActiveProtocols } from "./protocols";
+import { getFocusedProject, Project } from "./projects";
 
 // O miolo do cérebro, compartilhado entre as bocas (PWA streaming, Telegram, futuras).
 // M3: loop agêntico — o Principal decide entre responder direto ou usar ferramentas.
@@ -24,6 +25,7 @@ export type TurnContext = {
   geo: Geo | null;
   place: string | null;
   activeProtocols: string[];
+  project: Project | null;
 };
 
 export async function getContext(
@@ -49,7 +51,7 @@ export async function getContext(
     }
   }
 
-  const [memoriesRes, turnsRes, protocols] = await Promise.all([
+  const [memoriesRes, turnsRes, protocols, project] = await Promise.all([
     sb().rpc("match_memories", { query_embedding: msgEmbedding, match_count: 8 }),
     sb()
       .from("turns")
@@ -58,7 +60,26 @@ export async function getContext(
       .order("created_at", { ascending: false })
       .limit(20),
     getActiveProtocols(),
+    getFocusedProject(),
   ]);
+
+  // Viés de projeto (diretiva §9): turnos antigos DESTE projeto entram no contexto
+  let projectRecall = "";
+  if (project) {
+    const { data: projTurns } = await sb().rpc("match_project_turns", {
+      pid: project.id,
+      query_embedding: msgEmbedding,
+      match_count: 5,
+    });
+    if (projTurns && projTurns.length > 0) {
+      projectRecall = (projTurns as { role: string; content: string; created_at: string }[])
+        .map(
+          (t) =>
+            `[${String(t.created_at).slice(0, 10)}] ${t.role === "cris" ? "Cris" : "Você"}: ${t.content.slice(0, 250)}`
+        )
+        .join("\n");
+    }
+  }
 
   const history: Anthropic.MessageParam[] = (turnsRes.data ?? [])
     .reverse()
@@ -75,10 +96,13 @@ export async function getContext(
     geo,
     place,
     activeProtocols: protocols.map((p) => p.name),
+    project,
     system: buildSystemPrompt(memories, {
       geo,
       place,
       protocolPrompts: protocols.map((p) => p.config?.prompt).filter(Boolean) as string[],
+      project,
+      projectRecall,
     }),
   };
 }
@@ -102,7 +126,7 @@ export async function runTurn(
   source: string = "pwa"
 ): Promise<TurnResult> {
   const ctx = await getContext(message, session_id, geo, source);
-  const toolCtx: ToolContext = { geo: ctx.geo, place: ctx.place };
+  const toolCtx: ToolContext = { geo: ctx.geo, place: ctx.place, project: ctx.project };
 
   const messages: Anthropic.MessageParam[] = [
     ...ctx.history,
@@ -200,7 +224,7 @@ export async function persistTurn(
   modality: string = "text",
   route: string = "direct",
   toolName: string | null = null,
-  turnCtx?: Pick<TurnContext, "geo" | "place" | "activeProtocols">
+  turnCtx?: Pick<TurnContext, "geo" | "place" | "activeProtocols" | "project">
 ) {
   const now = new Date().toISOString();
   const extraction = await extractMemories(message, responseText);
@@ -210,6 +234,7 @@ export async function persistTurn(
     lng: turnCtx?.geo?.lng ?? null,
     place_label: turnCtx?.place ?? null,
     active_protocols: turnCtx?.activeProtocols?.length ? turnCtx.activeProtocols : null,
+    active_project: turnCtx?.project?.id ?? null,
   };
 
   const [respEmbedding] = await embed([responseText.slice(0, 8000)], "chat_persist");

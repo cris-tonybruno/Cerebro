@@ -12,6 +12,8 @@ export type PromptContext = {
   place?: string | null;
   geo?: { lat: number; lng: number } | null;
   protocolPrompts?: string[];
+  project?: { name: string; kind: string | null; notes: string | null } | null;
+  projectRecall?: string;
 };
 
 export function buildSystemPrompt(memories: RetrievedMemory[], ctx: PromptContext = {}): string {
@@ -33,6 +35,15 @@ e sugestões podem considerar o lugar ("você tá na faculdade, quer que eu deix
     (ctx.protocolPrompts ?? []).length > 0
       ? `\n${ctx.protocolPrompts!.join("\n")}\n`
       : "";
+
+  const projectBlock = ctx.project
+    ? `\nMODO PROJETO ATIVO: "${ctx.project.name}"${ctx.project.kind ? ` (${ctx.project.kind})` : ""}
+Você é PARCEIRO deste projeto: acompanhe decisões, fios abertos e progresso. Quando uma decisão
+importante for tomada na conversa, atualize as notas (project_notes_update). Responda "onde a
+gente parou" com project_status. Comandos: "fechar projeto" → project_close.
+NOTAS ATUAIS DO PROJETO: ${ctx.project.notes ?? "(sem notas ainda)"}
+${ctx.projectRecall ? `CONVERSAS ANTERIORES DESTE PROJETO (relevantes agora):\n${ctx.projectRecall}` : ""}\n`
+    : "";
 
   const memoryBlock =
     memories.length > 0
@@ -69,9 +80,11 @@ ROTEAMENTO (você decide a rota de cada pedido):
 
 AGORA: ${now} (Ottawa)
 ${whereBlock}
-${protocolBlock}
+${protocolBlock}${projectBlock}
 PROTOCOLOS: o Cris pode ativar/desativar por voz ("ativar protocolo obra") → use protocol_toggle.
 Disponíveis: foco, obra, casa, madrugada. Pode marcar lugares ("marca esse lugar como casa") → place_save.
+PROJETOS: "abrir projeto X" → project_open · "fechar projeto" → project_close ·
+"onde a gente parou?" → project_status. Efeito no PRÓXIMO turno.
 
 MEMÓRIAS RELEVANTES:
 ${memoryBlock}`;
