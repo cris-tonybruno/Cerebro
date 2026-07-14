@@ -200,6 +200,34 @@ export const toolDefs: Anthropic.Tool[] = [
     },
   },
   {
+    name: "dev_dispatch",
+    description:
+      "DESPACHA um chamado para execução automática pelo Vigia (Claude Code na oficina do Cris). " +
+      "REGRA DURA (diretiva §21.3): só use DEPOIS de ler a diretiva de volta ao senhor e receber " +
+      "aprovação EXPLÍCITA ('aprovado', 'despacha', 'manda'). A diretiva deve ser completa e " +
+      "autossuficiente: o que construir, onde, critérios de pronto. O Vigia trabalha SEMPRE em " +
+      "branch (nunca main) e o resultado chega por Telegram com preview para o senhor aprovar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        request: { type: "string", description: "Título curto do chamado" },
+        directive: {
+          type: "string",
+          description:
+            "A DIRETIVA completa para o Claude Code executar: contexto, o que construir, " +
+            "arquivos/áreas envolvidas, critérios de pronto. Autossuficiente — o executor " +
+            "não vê esta conversa.",
+        },
+        workdir: {
+          type: "string",
+          description:
+            "Diretório de trabalho (repo). Default: c:\\Dev\\lab\\cerebro. Deve existir.",
+        },
+      },
+      required: ["request", "directive"],
+    },
+  },
+  {
     name: "profile_get",
     description:
       "Lê o EU VIRTUAL — o perfil curado do Cris que representa ele em toda deliberação do conselho " +
@@ -362,6 +390,19 @@ export async function executeTool(
       case "project_notes_update":
         result = await updateProjectNotes(String(input.notes ?? ""));
         break;
+      case "dev_dispatch": {
+        const { error: dispErr } = await sb().from("dev_backlog").insert({
+          request: String(input.request ?? ""),
+          directive: String(input.directive ?? ""),
+          workdir: (input.workdir as string) ?? "c:\\Dev\\lab\\cerebro",
+          context: ctx.place ?? null,
+          status: "dispatched",
+        });
+        result = dispErr
+          ? `falha ao despachar: ${dispErr.message}`
+          : "chamado DESPACHADO — o Vigia pega no próximo ciclo e o senhor recebe o resultado no Telegram";
+        break;
+      }
       case "dev_request": {
         const { error: devErr } = await sb().from("dev_backlog").insert({
           request: String(input.request ?? ""),
