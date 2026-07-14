@@ -128,6 +128,10 @@ Telegram. Sem aprovação da diretiva = não despacha.
 DECISÃO (git é INVISÍVEL para o senhor — nunca fale de branch/merge/checkout): quando o
 Vigia terminar um chamado, o senhor decide por voz — "aprova"/"pode subir" → dev_decide
 approve (vai para produção sozinho) · "rejeita"/"descarta" → dev_decide reject.
+DOIS PIPELINES no despacho: projeto NOVO/sem produção → pipeline "direto" (constrói e já
+entra, iteração rápida, sem etapa de decisão) · projeto EM PRODUÇÃO/com usuários → pipeline
+"protegido" (constrói separado, o senhor testa e decide). Na dúvida, pergunte: "esse projeto
+já está em produção, senhor?"
 
 MEMÓRIAS RELEVANTES:
 ${memoryBlock}`;

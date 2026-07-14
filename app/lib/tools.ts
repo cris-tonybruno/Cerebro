@@ -223,6 +223,15 @@ export const toolDefs: Anthropic.Tool[] = [
           description:
             "Diretório de trabalho (repo). Default: c:\\Dev\\lab\\cerebro. Deve existir.",
         },
+        pipeline: {
+          type: "string",
+          enum: ["direto", "protegido"],
+          description:
+            "'direto' = projeto NOVO/sem produção: constrói direto, sem etapa de aprovação " +
+            "(iteração rápida). 'protegido' = projeto EM PRODUÇÃO/com usuários: constrói " +
+            "separado e espera o 'aprova' do senhor antes de subir. Na dúvida, PERGUNTE ao " +
+            "senhor se o projeto já está em produção. Default: protegido.",
+        },
       },
       required: ["request", "directive"],
     },
@@ -444,6 +453,7 @@ export async function executeTool(
           request: String(input.request ?? ""),
           directive: String(input.directive ?? ""),
           workdir: (input.workdir as string) ?? "c:\\Dev\\lab\\cerebro",
+          pipeline: input.pipeline === "direto" ? "direto" : "protegido",
           context: ctx.place ?? null,
           status: "dispatched",
         });

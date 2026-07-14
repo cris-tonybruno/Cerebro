@@ -615,9 +615,24 @@ CRIS (voz) ↔ CÉREBRO (foreman: entende → diretiva → delega → reporta)
 | `directive_write` | Redige/atualiza a DIRETIVA.md do projeto a partir da conversa (o contrato com a oficina) |
 | `dev_dispatch` | Anexa a diretiva a um chamado e o marca como pronto para o despachante |
 
+### 21.2.1 Dois pipelines (decisão do Cris, 2026-07-14)
+
+O Cris não opera git — o vocabulário dele é **despacha / aprova / rejeita**, e a mecânica é
+invisível. E o despacho tem dois modos, conforme o alvo:
+
+- **`direto`** — projeto NOVO, sem produção/usuários (obra vazia): o Vigia constrói na linha
+  principal e o resultado já entra. Iteração rápida: fala → constrói → testa → fala de novo.
+  É como o Cérebro foi construído.
+- **`protegido`** — projeto EM PRODUÇÃO (obra habitada, ex.: Timekeeper): o Vigia constrói em
+  separado, avisa no Telegram, e só entra com o **"aprova"** do Cris (merge automático pelo
+  Vigia). "Rejeita" descarta. Conflito devolve para a oficina.
+
+Na dúvida, OLIVER pergunta: "esse projeto já está em produção, senhor?"
+
 ### 21.3 Regras duras (inegociáveis)
 
-1. **Nunca na main.** Todo trabalho do despachante nasce em branch → PR → preview.
+1. **Produção protegida.** Em projeto com produção, o trabalho nasce em branch e só entra
+   com aprovação explícita do Cris (a mecânica git é invisível para ele).
 2. **Merge = approval card** com fricção real (senha/TOTP do M8), via Telegram/PWA.
 3. **Diretiva aprovada antes de despachar**: o Cérebro lê a diretiva de volta ao Cris por voz e
    só despacha com "aprovado" explícito dele.

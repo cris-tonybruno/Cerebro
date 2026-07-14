@@ -81,14 +81,17 @@ async function runJob(job) {
   if (!existsSync(workdir)) throw new Error(`workdir não existe: ${workdir}`);
   if (!job.directive?.trim()) throw new Error("chamado sem diretiva");
 
+  const direto = job.pipeline === "direto"; // projeto novo, sem produção: sem etapa de aprovação
   await setStatus(job.id, { status: "building" });
-  await telegram(`🔨 Vigia: iniciando chamado "${job.request}" (${short}) em ${workdir}`);
-  await audit("vigia:building", { id: job.id, request: job.request, workdir });
+  await telegram(
+    `🔨 Vigia: iniciando chamado "${job.request}" (${short}) em ${workdir}${direto ? " [pipeline direto]" : ""}`
+  );
+  await audit("vigia:building", { id: job.id, request: job.request, workdir, pipeline: job.pipeline });
 
-  // branch novo a partir do estado atual — NUNCA main
-  const branch = `chamado/${short}`;
   const baseBranch = git(workdir, ["rev-parse", "--abbrev-ref", "HEAD"]);
-  git(workdir, ["checkout", "-B", branch]);
+  // protegido: trabalho em separado (aprovação antes de subir) · direto: na própria main
+  const branch = direto ? baseBranch : `chamado/${short}`;
+  if (!direto) git(workdir, ["checkout", "-B", branch]);
 
   const prompt = `Você é o executor da oficina do Cérebro (Vigia, diretiva §21). Execute a DIRETIVA
 abaixo neste repositório. Regras: trabalhe SÓ neste diretório; commite suas mudanças com
@@ -116,32 +119,50 @@ ${job.directive}`;
     output = `${err.stdout ?? ""}\n[ERRO] ${err.message}`;
   }
 
-  const commits = git(workdir, ["log", `${baseBranch}..${branch}`, "--oneline"]);
+  const commits = direto
+    ? git(workdir, ["log", "@{u}..HEAD", "--oneline"]) // o que ainda não foi pro remoto
+    : git(workdir, ["log", `${baseBranch}..${branch}`, "--oneline"]);
   const summary = output.trim().slice(-1500);
 
   if (ok && commits) {
-    git(workdir, ["push", "-u", "origin", branch, "--force-with-lease"]);
-    git(workdir, ["checkout", baseBranch]);
-    await setStatus(job.id, {
-      status: "built",
-      branch,
-      resolved_at: new Date().toISOString(),
-      resolution: `branch ${branch}\ncommits:\n${commits}\n\n${summary}`,
-    });
-    await audit("vigia:built", { id: job.id, branch, commits });
-    await telegram(
-      `✅ Chamado "${job.request}" construído no branch ${branch}.\n\nCommits:\n${commits}\n\n${summary.slice(-600)}\n\n⚠️ Nada foi para produção — revisar e aprovar o merge.`
-    );
-    console.log(`✅ built: ${branch}\n${commits}`);
+    if (direto) {
+      // projeto novo: sobe direto, sem etapa de aprovação
+      git(workdir, ["push", "origin", baseBranch]);
+      await setStatus(job.id, {
+        status: "merged",
+        branch: baseBranch,
+        resolved_at: new Date().toISOString(),
+        resolution: `pipeline direto (${baseBranch})\ncommits:\n${commits}\n\n${summary}`,
+      });
+      await audit("vigia:merged", { id: job.id, pipeline: "direto", commits });
+      await telegram(
+        `🚀 Chamado "${job.request}" construído e JÁ NO PROJETO (pipeline direto).\n\nCommits:\n${commits}\n\n${summary.slice(-600)}`
+      );
+      console.log(`🚀 direto: ${commits}`);
+    } else {
+      git(workdir, ["push", "-u", "origin", branch, "--force-with-lease"]);
+      git(workdir, ["checkout", baseBranch]);
+      await setStatus(job.id, {
+        status: "built",
+        branch,
+        resolved_at: new Date().toISOString(),
+        resolution: `branch ${branch}\ncommits:\n${commits}\n\n${summary}`,
+      });
+      await audit("vigia:built", { id: job.id, branch, commits });
+      await telegram(
+        `✅ Chamado "${job.request}" construído — aguardando sua decisão: "aprova" (sobe pra produção) ou "rejeita".\n\nO que foi feito:\n${commits}\n\n${summary.slice(-600)}`
+      );
+      console.log(`✅ built: ${branch}\n${commits}`);
+    }
   } else {
-    git(workdir, ["checkout", baseBranch]);
+    if (!direto) git(workdir, ["checkout", baseBranch]);
     await setStatus(job.id, {
       status: "failed",
-      branch,
+      branch: direto ? null : branch,
       resolved_at: new Date().toISOString(),
       resolution: summary || "sem mudanças produzidas",
     });
-    await audit("vigia:failed", { id: job.id, branch });
+    await audit("vigia:failed", { id: job.id });
     await telegram(
       `❌ Chamado "${job.request}" falhou ou não produziu mudanças.\n\n${summary.slice(-600)}`
     );

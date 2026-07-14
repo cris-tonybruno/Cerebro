@@ -15,3 +15,8 @@ alter table dev_backlog add constraint dev_backlog_status_check
 alter table dev_backlog drop constraint if exists dev_backlog_status_check;
 alter table dev_backlog add constraint dev_backlog_status_check
   check (status in ('pending','dispatched','building','built','approved','merging','merged','failed','rejected'));
+
+-- v3: dois pipelines — 'direto' (projeto novo, sem produção: constrói na main)
+-- e 'protegido' (produção: separado + aprovação do Cris antes de subir)
+alter table dev_backlog add column if not exists pipeline text not null default 'protegido'
+  check (pipeline in ('direto','protegido'));
