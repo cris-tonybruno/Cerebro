@@ -64,11 +64,17 @@ Migrations vivem AQUI, em `supabase/migrations/` — não em `onsite-core-db`.
 6. **Build order M1→M11** (diretiva §13). Cada milestone deployável na Vercel antes do próximo.
    Gate do M1: Cris usa diariamente por uma semana e sente falta quando não usa.
 
-## Estado atual
+## Estado atual (2026-07-14)
 
-- **M1 — Fundação**: em construção. Escopo: schema Supabase + shell Next.js + chat TEXTO com
-  Claude Principal + memória write/read com zonas + Memory Browser + botão export + contador
-  de custo. Sem voz, sem conselho, sem polimento — deliberadamente feio.
+- **M1–M8 COMPLETOS** — Fase 1 construída e em produção: https://cerebro-rouge.vercel.app
+  (memória com zonas, voz bidirecional, Telegram, roteador+ferramentas, conselho com Eu Virtual,
+  GPS/lugares/protocolos, Project Mode, fotos/docs com lições de visão, Blackout+audit+approvals).
+- **Extras além do plano**: marcos (efeito borboleta), world_digest semanal, arquivo de
+  pesquisas, recall_past, vision_lessons, creator_profile, dev_backlog.
+- **Próximo: M8.5 — Oficina Remota** (diretiva §21): o despachante que fecha o abismo
+  cérebro↔oficina. Depois, Fase 2 (M9 — Pixel 9a; open box Best Buy recomendado).
+- Bot Telegram: @cristony_cerebro_bot · Supabase ref: daapbonkbgghaeyutosg (conta pessoal)
+- Pendências: chave Tavily (busca web dormente); Cris cadastrar TOTP do Blackout no autenticador.
 
 ## Regra da Oficina (dev_backlog)
 

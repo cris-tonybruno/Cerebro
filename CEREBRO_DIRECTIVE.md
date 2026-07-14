@@ -384,6 +384,9 @@ TELEGRAM_BOT_TOKEN=         # M2.5 corpo provisório
 6. **M6 — Project Mode.**
 7. **M7 — Storage:** photo/doc upload, extraction, embedding.
 8. **M8 — Segurança:** kill switch, audit log UI, approval cards em tudo que é sensível.
+8.5. **M8.5 — Oficina Remota (despachante):** fecha o abismo cérebro↔oficina — programar por
+   voz da estrada, com o Cérebro como foreman que delega ao Claude Code. Detalhe em §21.
+   Último milestone da Fase 1.
 9. **M9 — Android:** device provisioning runbook, thin shell/PWA install, intents layer, heartbeat, Find My Device drill (testar o Blackout de verdade uma vez).
 10. **M10 — (opcional/avançado):** Accessibility automation p/ apps sem API; wake word.
 
@@ -566,5 +569,66 @@ On-device speaker ID + rolling buffer require native capability → **M10** (alo
 - No processing of audio from conversations Cris is not a party to (§19 gate). No capture of Rejane/daughters/therapy under any mode.
 - Cris's primary bank accounts and personal cards never on the device.
 - No silent MDM install automation in v1.
+
+## 21. OFICINA REMOTA — PROTOCOLO DE DELEGAÇÃO (M8.5)
+
+**Cenário-alvo:** Cris viajando, fone no ouvido, celular no bolso. Por voz: "Cérebro, abre um
+projeto novo chamado xpto" → o Cérebro provisiona (repo GitHub + tabela + diretório), conversa
+até entender a visão, **escreve uma diretiva** e **delega a execução** ao Claude Code. Cris
+testa no preview, conversa, nova diretiva, novo ciclo — sem nunca abrir o VSCode.
+
+**Princípio econômico:** o Cérebro é o FOREMAN, não o pedreiro. Ele só conversa e escreve
+diretivas (parágrafos — centavos); quem executa é o Claude Code (que na variante local roda
+pela assinatura Claude do Cris — custo marginal ~zero).
+
+### 21.1 Arquitetura
+
+```
+CRIS (voz) ↔ CÉREBRO (foreman: entende → diretiva → delega → reporta)
+                 │ chamado com diretiva anexa (dev_backlog)
+                 ▼
+           DESPACHANTE  ← o elo novo
+                 │
+   ┌─────────────┴──────────────┐
+   │ A. VIGIA LOCAL             │ B. AGENTE NUVEM (fase 2 do M8.5)
+   │ script no PC do Cris;      │ agente de código gerenciado,
+   │ roda Claude Code headless  │ repo GitHub montado; funciona
+   │ no diretório do projeto;   │ com o PC desligado; cobra API
+   │ usa a assinatura Claude    │
+   └─────────────┬──────────────┘
+                 ▼
+        CLAUDE CODE executa a diretiva → commit em BRANCH → push
+                 │
+        Vercel PREVIEW (URL de teste, nunca produção)
+                 │
+        relatório → dev_backlog (status/resolution) → CÉREBRO notifica
+        Cris no Telegram: resultado + link do preview
+                 │
+        APPROVAL CARD (M8): merge só com aprovação explícita (senha/TOTP)
+```
+
+### 21.2 Ferramentas novas do Principal
+
+| Ferramenta | Faz |
+|---|---|
+| `project_bootstrap` | Cria repo GitHub (PAT dedicado), diretório padrão e registro do projeto; liga o Project Mode |
+| `directive_write` | Redige/atualiza a DIRETIVA.md do projeto a partir da conversa (o contrato com a oficina) |
+| `dev_dispatch` | Anexa a diretiva a um chamado e o marca como pronto para o despachante |
+
+### 21.3 Regras duras (inegociáveis)
+
+1. **Nunca na main.** Todo trabalho do despachante nasce em branch → PR → preview.
+2. **Merge = approval card** com fricção real (senha/TOTP do M8), via Telegram/PWA.
+3. **Diretiva aprovada antes de despachar**: o Cérebro lê a diretiva de volta ao Cris por voz e
+   só despacha com "aprovado" explícito dele.
+4. **Budget cap por chamado** (variante B) e timeout de execução (ambas).
+5. **Audit total**: chamado → diretiva → commits → decisão, tudo encadeado e consultável.
+6. O despachante só executa chamados do `dev_backlog` — nenhum outro canal o aciona.
+
+### 21.4 Gate do M8.5
+
+Um projeto de teste ("xpto") criado **100% por voz**, do "abre o projeto" ao preview testado
+no celular, sem o Cris tocar no VSCode. Se o ciclo fechar redondo, a Fase 1 termina e o M9
+(corpo) começa com a oficina já remota.
 
 — End of directive.
