@@ -128,27 +128,34 @@ export async function POST(req: Request) {
       `[FOTO enviada pelo Cris — o que você vê nela]: ${description}`;
   }
 
-  // Documento (PDF/texto) → guarda + extrai o essencial (M7)
+  // Documento → guarda + extrai (M7). Imagem mandada "como arquivo" é tratada como foto.
   if (!text && msg.document?.file_id) {
-    modality = "doc";
     await tg("sendChatAction", { chat_id: chatId, action: "typing" });
     const doc = msg.document;
+    const mime = doc.mime_type ?? "application/octet-stream";
     const blob = await downloadFile(doc.file_id);
     if (!blob) {
       await tg("sendMessage", { chat_id: chatId, text: "Não consegui baixar o documento 🤔" });
       return Response.json({ ok: true });
     }
     const bytes = Buffer.from(await blob.arrayBuffer());
-    const ext = (doc.file_name ?? "arquivo").split(".").pop() ?? "bin";
-    attachmentPath = await storeFile(
-      "docs",
-      datedPath(ext),
-      bytes,
-      doc.mime_type ?? "application/octet-stream"
-    );
-    const extraction = await extractDoc(bytes, doc.mime_type ?? "", doc.file_name ?? "arquivo");
     const caption = (msg.caption ?? "").trim();
-    text = (caption ? `${caption}\n\n` : "") + `[DOCUMENTO enviado pelo Cris]: ${extraction}`;
+    const ext = (doc.file_name ?? "arquivo").split(".").pop() ?? "bin";
+
+    if (mime.startsWith("image/")) {
+      // galeria "sem compressão" → foto de verdade
+      modality = "image";
+      attachmentPath = await storeFile("photos", datedPath(ext), bytes, mime);
+      const description = await describeImage(bytes, mime);
+      text =
+        (caption ? `${caption}\n\n` : "") +
+        `[FOTO enviada pelo Cris — o que você vê nela]: ${description}`;
+    } else {
+      modality = "doc";
+      attachmentPath = await storeFile("docs", datedPath(ext), bytes, mime);
+      const extraction = await extractDoc(bytes, mime, doc.file_name ?? "arquivo");
+      text = (caption ? `${caption}\n\n` : "") + `[DOCUMENTO enviado pelo Cris]: ${extraction}`;
+    }
   }
 
   if (!text) {

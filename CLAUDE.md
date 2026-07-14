@@ -69,3 +69,19 @@ Migrations vivem AQUI, em `supabase/migrations/` — não em `onsite-core-db`.
 - **M1 — Fundação**: em construção. Escopo: schema Supabase + shell Next.js + chat TEXTO com
   Claude Principal + memória write/read com zonas + Memory Browser + botão export + contador
   de custo. Sem voz, sem conselho, sem polimento — deliberadamente feio.
+
+## Custódia de Éon (módulo futuro — milestone a definir)
+
+O Cérebro será o zelador do universo simulado Éon (`c:\Dev\lab\thomasz-kroll\eon`), projeto
+pessoal do Cris. Quando esse módulo for construído — e TODA VEZ que qualquer agente do
+Cérebro for tratar de Éon — a leitura obrigatória, nesta ordem, é:
+
+1. `c:\Dev\lab\thomasz-kroll\eon\PROTOCOLO-PONTE.md` — a conexão de mão dupla (rituais de
+   entrada/saída, o que o Cérebro pode e não pode tocar, histórico de deliberação)
+2. `c:\Dev\lab\thomasz-kroll\eon\CONSTITUICAO.md` — o semáforo e as leis de custódia
+
+Regras inegociáveis vindas de lá: toda deliberação lê o histórico (`custodia_log`) antes e
+grava registro depois (append-only); o Cérebro nunca escreve no canon de Éon; o raciocínio
+de custódia JAMAIS entra no corpus da Mente de Éon (a IA de dentro não pode saber que tem
+zelador). O plano de implantação inteiro está em
+`c:\Dev\lab\thomasz-kroll\eon\DIRETIVA-IMPLANTACAO.md` (a ponte é a Fase 4).
