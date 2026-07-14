@@ -151,19 +151,38 @@ export async function runCouncil(question: string): Promise<string> {
   }));
 
   // ── Estágio 3: síntese do Presidente (teto fixo — digerível por voz) ─
+  // O Presidente (Claude) é o ÚNICO que vê a vida inteira do Cris: a memória
+  // completa, sem filtro de zona, entra AQUI — nunca nos membros externos.
+  const { data: fullMemories } = await sb().rpc("match_memories", {
+    query_embedding: qEmbedding,
+    match_count: 10,
+    exclude_private: false,
+  });
+  const personalContext =
+    (fullMemories ?? []).length > 0
+      ? `\nCONTEXTO ÍNTIMO DO CRIS (confidencial — só você viu isto; os conselheiros NÃO viram):\n${(
+          fullMemories ?? []
+        )
+          .map((m: { content: string; zone: string }) => `- [${m.zone}] ${m.content}`)
+          .join("\n")}\n`
+      : "";
+
   const synthesis = await askClaude(
     `Você é o PRESIDENTE do conselho pessoal do Cris. A questão foi: "${question}".\n\n` +
       `OPINIÕES (anônimas):\n${anonBlock}\n\n` +
       `REVISÕES CRUZADAS:\n${reviews
         .filter((r) => r.ok)
         .map((r, i) => `Revisor ${i + 1}: ${r.text}`)
-        .join("\n\n")}\n\n` +
-      `Produza a decisão final do conselho em português, no formato:\n` +
+        .join("\n\n")}\n` +
+      personalContext +
+      `\nProduza a decisão final do conselho em português, no formato:\n` +
       `1. RECOMENDAÇÃO (a posição do conselho, clara e acionável)\n` +
       `2. DISSENSO MAIS FORTE (o melhor argumento contrário)\n` +
-      `3. CONFIANÇA (alta/média/baixa + uma linha do porquê)\n` +
+      `3. LEITURA PESSOAL (o aval de quem conhece o Cris: como esta decisão conversa com a vida, ` +
+      `a família e o momento dele — ajuste ou reforce a recomendação à luz disso, sem expor detalhes íntimos desnecessariamente)\n` +
+      `4. CONFIANÇA (alta/média/baixa + uma linha do porquê)\n` +
       `Fale como quem fala, não como quem redige ata. Seja direto.`,
-    600
+    700
   );
 
   // Sessão inteira gravada (diretiva §3.4)
