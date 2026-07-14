@@ -280,7 +280,7 @@ export async function persistTurn(
 }
 
 type ExtractedMemory = {
-  kind: "fact" | "preference" | "person" | "place" | "routine";
+  kind: "fact" | "preference" | "person" | "place" | "routine" | "marco";
   content: string;
   zone: "pessoal" | "negocios" | "criativo" | "familia";
   confidence: number;
@@ -314,7 +314,7 @@ async function extractMemories(message: string, response: string): Promise<Extra
                   properties: {
                     kind: {
                       type: "string",
-                      enum: ["fact", "preference", "person", "place", "routine"],
+                      enum: ["fact", "preference", "person", "place", "routine", "marco"],
                     },
                     content: { type: "string" },
                     zone: {
@@ -344,6 +344,11 @@ Analise este turno de conversa e:
    os projetos dele ou as preferências dele. Frases simples e legíveis em português.
    Só extraia o que vale lembrar daqui a meses. Conversa trivial = zero memórias.
    Se o Cris pediu explicitamente para guardar/anotar algo, isso SEMPRE vira memória.
+3. Tipo especial "marco" (efeito borboleta): quando o Cris expressar como um EVENTO DO MUNDO
+   (política, economia, clima, guerra, eleição) afetou ou está afetando a vida, decisões,
+   emoções ou criatividade dele — a LEITURA CAUSAL dele, não o fato em si. Ex: "as tarifas
+   do Trump derrubaram a construção e por isso voltei a estudar". Marcos SEMPRE viram memória,
+   com a corrente causal explícita no texto. São irrecuperáveis se não capturados agora.
 
 CRIS DISSE:
 ${message}

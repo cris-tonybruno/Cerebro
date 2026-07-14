@@ -22,8 +22,10 @@ export const toolDefs: Anthropic.Tool[] = [
         content: { type: "string", description: "A memória, em uma frase legível em português" },
         kind: {
           type: "string",
-          enum: ["fact", "preference", "person", "place", "routine"],
-          description: "Tipo da memória",
+          enum: ["fact", "preference", "person", "place", "routine", "marco"],
+          description:
+            "Tipo da memória. 'marco' = efeito borboleta: como um evento do mundo (política, " +
+            "economia, clima) afetou a vida/decisões/criatividade do Cris — a leitura causal dele.",
         },
         zone: {
           type: "string",

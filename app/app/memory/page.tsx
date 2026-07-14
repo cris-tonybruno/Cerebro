@@ -14,7 +14,7 @@ type Memory = {
 };
 
 const ZONES = ["todas", "pessoal", "familia", "negocios", "criativo"] as const;
-const KINDS = ["fact", "preference", "person", "place", "routine"];
+const KINDS = ["fact", "preference", "person", "place", "routine", "marco"];
 
 export default function MemoryPage() {
   const [memories, setMemories] = useState<Memory[]>([]);
