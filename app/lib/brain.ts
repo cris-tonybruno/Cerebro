@@ -383,6 +383,12 @@ Analise este turno de conversa e:
    emoções ou criatividade dele — a LEITURA CAUSAL dele, não o fato em si. Ex: "as tarifas
    do Trump derrubaram a construção e por isso voltei a estudar". Marcos SEMPRE viram memória,
    com a corrente causal explícita no texto. São irrecuperáveis se não capturados agora.
+4. VOCATIVOS: se o Cris chamou o assistente por um vocativo (ex: "coisinha", apelidos,
+   diminutivos — qualquer coisa que não seja "Oliver" ou nada), registre/refine a associação
+   vocativo→humor como memória kind=preference, zone=pessoal. Formato: "Quando chama o
+   assistente de '<vocativo>', o Cris costuma estar <leitura do humor baseada no tom desta
+   conversa>". Se já existir associação conhecida, só registre se esta conversa REFINAR a
+   leitura.
 
 CRIS DISSE:
 ${message}
