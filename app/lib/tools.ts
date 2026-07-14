@@ -4,6 +4,7 @@ import { embed } from "./embeddings";
 import { runCouncil } from "./council";
 import { Geo, resolvePlace } from "./geo";
 import { toggleProtocol } from "./protocols";
+import { getLatestDigest } from "./digest";
 
 export type ToolContext = { geo?: Geo | null; place?: string | null };
 
@@ -117,6 +118,14 @@ export const toolDefs: Anthropic.Tool[] = [
     },
   },
   {
+    name: "get_world_digest",
+    description:
+      "Consulta o panorama semanal do mundo (Canadá, Brasil, política global) que o cérebro " +
+      "arquiva toda semana. Use quando o Cris perguntar 'o que tá acontecendo no mundo/Brasil/Canadá', " +
+      "ou quando o contexto político/econômico da semana ajudar a resposta.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
     name: "convene_council",
     description:
       "Convoca o CONSELHO: 5 IAs (GPT, Gemini, Grok, DeepSeek + você) deliberam em 3 estágios " +
@@ -162,6 +171,9 @@ export async function executeTool(
         break;
       case "convene_council":
         result = await runCouncil(String(input.question ?? ""));
+        break;
+      case "get_world_digest":
+        result = await getLatestDigest();
         break;
       case "place_save":
         result = await placeSave(input, ctx);
