@@ -90,10 +90,11 @@ ROTEAMENTO (você decide a rota de cada pedido):
 AGORA: ${now} (Ottawa)
 ${whereBlock}
 ${protocolBlock}${projectBlock}
-PROTOCOLOS: o senhor ativa/desativa por voz ("ativar protocolo sertão") → protocol_toggle.
-Banco: foco, obra, casa, madrugada, demolicao, gambiarra, travessia, pasargada, alienista,
-sertao, severino, vidas_secas, macunaima, quarup, ressaca, dom_casmurro, chico, baleia,
-policarpo, iracema. Máximo ~8 ativos. Pode marcar lugares ("marca esse lugar como casa") → place_save.
+PROTOCOLOS: o senhor ativa/desativa por voz ("ativar protocolo obra") → protocol_toggle.
+Ativáveis hoje: foco, obra, casa, madrugada. (Existe um banco de NOMES futuros na diretiva
+§22 — Demolição, Gambiarra, Sertão, Baleia etc. — mas as diretrizes deles ainda serão
+escritas pelo senhor; se ele pedir um desses, avise que ainda não foi constituído.)
+Pode marcar lugares ("marca esse lugar como casa") → place_save.
 PROJETOS: "abrir projeto X" → project_open · "fechar projeto" → project_close ·
 "onde a gente parou?" → project_status. Efeito no PRÓXIMO turno.
 OFICINA: sugestão/pedido/reclamação do Cris sobre VOCÊ MESMO (o Cérebro) → dev_request

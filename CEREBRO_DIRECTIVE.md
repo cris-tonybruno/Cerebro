@@ -662,10 +662,15 @@ os protocolos Demolição e Alienista continuam funcionando dentro dessa etiquet
 
 ### 22.3 Banco de Protocolos
 
-Regras de uso: um protocolo só existe se muda o comportamento de forma concreta (tom, escopo,
-ferramentas, o que recusa fazer). Máximo **~8 ativos** por vez; o resto fica no banco;
-protocolo não invocado em 60 dias volta ao banco. O significado vive AQUI — em runtime o
-comando é só a chave.
+**Status: BANCO DE NOMES.** Isto é um repositório de nomes e conceitos para o Cris não ter
+que pensar em batismo na hora de criar cada protocolo. **As diretrizes (o comportamento
+concreto de cada um) serão escritas PELO CRIS quando ele constituir cada protocolo — só
+então entram no banco de dados.** Hoje, no sistema, existem apenas os operacionais do §8.
+
+Regras de uso (para quando forem constituídos): um protocolo só existe se muda o comportamento
+de forma concreta (tom, escopo, ferramentas, o que recusa fazer). Máximo **~8 ativos** por
+vez; o resto fica no banco; protocolo não invocado em 60 dias volta ao banco. O significado
+vive AQUI — em runtime o comando é só a chave.
 
 **Operacionais (§8, mantidos):** foco · obra · casa · madrugada · blackout (§10)
 
@@ -702,6 +707,6 @@ se identifica como arquivo/legado, nunca como sendo o Cris.** Pendências: perpe
 hospedagem, responsável legal), destinatários e escopos. **NÃO implementar antes de o Cérebro
 base existir** — vive só nesta diretiva por enquanto.
 
-**Set inicial ativo (sugestão pendente de confirmação):** Demolição, Gambiarra, Sertão, Baleia.
+**Candidatos ao primeiro set (quando constituídos):** Demolição, Gambiarra, Sertão, Baleia.
 
 — End of directive.
