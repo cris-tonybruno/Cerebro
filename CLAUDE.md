@@ -1,9 +1,11 @@
-# CÉREBRO — Personal AI Brain (Voice-First Council System)
+# CÉREBRO / OLIVER — Personal AI Brain (Voice-First Council System)
 
 > Projeto: destino único voice-first que escuta o Cris, lembra de tudo, sabe onde/quando está,
 > e roteia cada pedido para a inteligência certa (direta, agente, ou conselho de 5 IAs).
 > Autor: Cris Tony · Ottawa, ON · Julho 2026
-> Status: EM CONSTRUÇÃO — M1 (Fundação) iniciado em 2026-07-11.
+> **Nome da assistente: OLIVER** (decidido 2026-07-14, diretiva §22) — mordomo digital,
+> "filho digital", trata o Cris de "senhor". Registro e banco de 20 protocolos na diretiva §22.
+> "Cérebro" segue como nome do PROJETO/repo; OLIVER é quem atende.
 
 ---
 
