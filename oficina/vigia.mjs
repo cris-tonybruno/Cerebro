@@ -149,15 +149,51 @@ ${job.directive}`;
   }
 }
 
+// ── mescla UM chamado aprovado (git invisível para o Cris) ───
+async function mergeJob(job) {
+  const workdir = resolve(job.workdir || resolve(ROOT));
+  const short = job.id.slice(0, 8);
+  console.log(`\n🔀 merge do chamado ${short}: ${job.request} (${job.branch})`);
+  if (!job.branch) throw new Error("chamado aprovado sem branch");
+
+  await setStatus(job.id, { status: "merging" });
+  try {
+    const baseBranch = git(workdir, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    if (git(workdir, ["status", "--porcelain"])) {
+      throw new Error("árvore de trabalho suja — oficina em uso; merge adiado");
+    }
+    git(workdir, ["fetch", "origin"]);
+    git(workdir, ["merge", "--no-ff", job.branch, "-m", `Merge chamado: ${job.request} (aprovado pelo Cris)`]);
+    git(workdir, ["push", "origin", baseBranch]);
+    git(workdir, ["push", "origin", "--delete", job.branch]);
+    git(workdir, ["branch", "-D", job.branch]);
+    await setStatus(job.id, { status: "merged", resolved_at: new Date().toISOString() });
+    await audit("vigia:merged", { id: job.id, branch: job.branch });
+    await telegram(`🚀 Chamado "${job.request}" mesclado e a caminho da produção (deploy automático).`);
+    console.log("🚀 merged");
+  } catch (err) {
+    // conflito ou árvore suja: devolve para 'built', o Cris decide com a oficina
+    try { git(workdir, ["merge", "--abort"]); } catch { /* sem merge em curso */ }
+    await setStatus(job.id, { status: "built", resolution: `merge falhou: ${err.message}` });
+    await telegram(`⚠️ Merge do chamado "${job.request}" falhou (${err.message}). Fica para a oficina resolver.`);
+    console.error("merge falhou:", err.message);
+  }
+}
+
 // ── loop ─────────────────────────────────────────────────────
 const once = process.argv.includes("--once");
 console.log(`👁️  Vigia de plantão (poll ${POLL_MS / 1000}s${once ? ", ciclo único" : ""})...`);
 
 do {
   try {
-    const jobs = await rest("dev_backlog?status=eq.dispatched&order=created_at&limit=1");
-    if (jobs.length > 0) await runJob(jobs[0]);
-    else if (once) console.log("nada despachado.");
+    // prioridade 1: merges aprovados pelo Cris; prioridade 2: construções
+    const approved = await rest("dev_backlog?status=eq.approved&order=created_at&limit=1");
+    if (approved.length > 0) await mergeJob(approved[0]);
+    else {
+      const jobs = await rest("dev_backlog?status=eq.dispatched&order=created_at&limit=1");
+      if (jobs.length > 0) await runJob(jobs[0]);
+      else if (once) console.log("nada despachado.");
+    }
   } catch (err) {
     console.error("vigia:", err.message);
   }

@@ -228,6 +228,29 @@ export const toolDefs: Anthropic.Tool[] = [
     },
   },
   {
+    name: "dev_decide",
+    description:
+      "Registra a DECISÃO do Cris sobre um chamado construído pelo Vigia (status 'built'): " +
+      "aprovar (o Vigia mescla na produção sozinho — git é invisível para o senhor) ou rejeitar " +
+      "(o trabalho é descartado). Use quando o senhor disser 'aprova o chamado' / 'pode subir' / " +
+      "'rejeita' / 'descarta'. Sem chamado especificado, aplica ao mais recente 'built'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        decision: {
+          type: "string",
+          enum: ["approve", "reject"],
+          description: "approve = mesclar na produção · reject = descartar",
+        },
+        request_hint: {
+          type: "string",
+          description: "Trecho do título do chamado, se o senhor especificou qual",
+        },
+      },
+      required: ["decision"],
+    },
+  },
+  {
     name: "profile_get",
     description:
       "Lê o EU VIRTUAL — o perfil curado do Cris que representa ele em toda deliberação do conselho " +
@@ -390,6 +413,32 @@ export async function executeTool(
       case "project_notes_update":
         result = await updateProjectNotes(String(input.notes ?? ""));
         break;
+      case "dev_decide": {
+        const hint = String(input.request_hint ?? "").trim();
+        let q = sb()
+          .from("dev_backlog")
+          .select("id, request, branch")
+          .eq("status", "built")
+          .order("resolved_at", { ascending: false })
+          .limit(1);
+        if (hint) q = q.ilike("request", `%${hint}%`);
+        const { data: card } = await q.maybeSingle();
+        if (!card) {
+          result = "nenhum chamado construído aguardando decisão" + (hint ? ` com "${hint}"` : "");
+          break;
+        }
+        const approved = input.decision === "approve";
+        const { error: decErr } = await sb()
+          .from("dev_backlog")
+          .update({ status: approved ? "approved" : "rejected" })
+          .eq("id", card.id);
+        result = decErr
+          ? `falha: ${decErr.message}`
+          : approved
+            ? `chamado "${card.request}" APROVADO — o Vigia mescla na produção no próximo ciclo e avisa no Telegram`
+            : `chamado "${card.request}" rejeitado e arquivado`;
+        break;
+      }
       case "dev_dispatch": {
         const { error: dispErr } = await sb().from("dev_backlog").insert({
           request: String(input.request ?? ""),

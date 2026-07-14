@@ -9,3 +9,9 @@ alter table dev_backlog add column if not exists branch text;      -- branch cri
 alter table dev_backlog drop constraint if exists dev_backlog_status_check;
 alter table dev_backlog add constraint dev_backlog_status_check
   check (status in ('pending', 'dispatched', 'building', 'built', 'failed', 'rejected'));
+
+-- v2: git invisível para o Cris — aprovação por voz, merge automático pelo Vigia
+-- built → approved ("aprova") → merging → merged | rejected ("rejeita")
+alter table dev_backlog drop constraint if exists dev_backlog_status_check;
+alter table dev_backlog add constraint dev_backlog_status_check
+  check (status in ('pending','dispatched','building','built','approved','merging','merged','failed','rejected'));
