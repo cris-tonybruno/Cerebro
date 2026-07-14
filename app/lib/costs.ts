@@ -32,9 +32,13 @@ export async function logUsage(row: {
   input_tokens: number;
   output_tokens: number;
   turn_id?: string | null;
+  cost_usd?: number; // custo explícito (OpenRouter devolve o valor exato)
 }): Promise<void> {
-  const cost_usd = computeCostUsd(row.model, row.input_tokens, row.output_tokens);
-  const { error } = await sb().from("api_usage").insert({ ...row, cost_usd });
+  const cost_usd =
+    row.cost_usd ?? computeCostUsd(row.model, row.input_tokens, row.output_tokens);
+  const { error } = await sb()
+    .from("api_usage")
+    .insert({ ...row, cost_usd });
   if (error) console.error("logUsage:", error.message);
 }
 

@@ -199,6 +199,9 @@ export default function ChatPage() {
           <Link href="/memory" className="underline underline-offset-2">
             memória
           </Link>
+          <Link href="/council" className="underline underline-offset-2">
+            conselho
+          </Link>
           <a href="/api/export?format=json" className="underline underline-offset-2">
             export
           </a>

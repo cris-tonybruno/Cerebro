@@ -53,7 +53,7 @@ export async function getContext(message: string, session_id: string): Promise<T
 
 export type TurnResult = {
   text: string;
-  route: "direct" | "tool";
+  route: "direct" | "tool" | "council";
   toolsUsed: string[];
 };
 
@@ -126,7 +126,11 @@ export async function runTurn(
     }
   }
 
-  const route: "direct" | "tool" = toolsUsed.length > 0 ? "tool" : "direct";
+  const route: "direct" | "tool" | "council" = toolsUsed.includes("convene_council")
+    ? "council"
+    : toolsUsed.length > 0
+      ? "tool"
+      : "direct";
   await persistTurn(
     session_id,
     message,

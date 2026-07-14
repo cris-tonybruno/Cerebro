@@ -1,6 +1,6 @@
 import { runTurn } from "@/lib/brain";
 
-export const maxDuration = 120;
+export const maxDuration = 300; // conselho leva 1-2 min (3 estágios)
 
 export async function POST(req: Request) {
   const { message, session_id, modality } = await req.json();

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sb } from "./supabase";
 import { embed } from "./embeddings";
+import { runCouncil } from "./council";
 
 // M3 — Ferramentas do roteador (rota B da diretiva §3.3).
 // Todas as execuções entram no audit_log.
@@ -77,6 +78,28 @@ export const toolDefs: Anthropic.Tool[] = [
       required: ["query"],
     },
   },
+  {
+    name: "convene_council",
+    description:
+      "Convoca o CONSELHO: 5 IAs (GPT, Gemini, Grok, DeepSeek + você) deliberam em 3 estágios " +
+      "e produzem uma recomendação com dissenso e confiança. Custa tempo (~1-2 min) e dinheiro (~$0.30-0.60). " +
+      "Use APENAS para decisões com peso real ou perspectivas genuinamente divergentes: estratégia de negócio, " +
+      "arquitetura, preço, decisões de vida, direção criativa — e quando o Cris pedir explicitamente " +
+      "('convoca o conselho', 'o que o conselho acha'). Para todo o resto, responda você mesmo. " +
+      "Antes de chamar, anuncie: 'Convocando o conselho.'",
+    input_schema: {
+      type: "object",
+      properties: {
+        question: {
+          type: "string",
+          description:
+            "A questão para o conselho, formulada de forma completa e autossuficiente, " +
+            "com o contexto essencial embutido (os conselheiros não veem a conversa)",
+        },
+      },
+      required: ["question"],
+    },
+  },
 ];
 
 export async function executeTool(
@@ -97,6 +120,9 @@ export async function executeTool(
         break;
       case "web_search":
         result = await webSearch(input);
+        break;
+      case "convene_council":
+        result = await runCouncil(String(input.question ?? ""));
         break;
       default:
         result = `ferramenta desconhecida: ${name}`;

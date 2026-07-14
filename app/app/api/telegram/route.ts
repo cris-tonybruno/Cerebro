@@ -6,7 +6,7 @@ import { synthesize } from "@/lib/tts";
 // M2.5 — Corpo provisório: bot do Telegram ligado no mesmo cérebro.
 // Segurança: (1) secret token do webhook no header, (2) só responde ao chat do Cris.
 
-export const maxDuration = 120;
+export const maxDuration = 300; // conselho leva 1-2 min (3 estágios)
 
 const TG = () => `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
