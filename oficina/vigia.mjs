@@ -101,12 +101,14 @@ ${job.directive}`;
   let output = "";
   let ok = true;
   try {
-    output = execFileSync("claude", ["-p", prompt, "--permission-mode", "acceptEdits"], {
+    // diretiva via STDIN (argumentos são só flags estáticas — nada a escapar)
+    output = execFileSync("claude", ["-p", "--permission-mode", "acceptEdits"], {
       cwd: workdir,
+      input: prompt,
       encoding: "utf8",
       timeout: CLAUDE_TIMEOUT_MS,
       maxBuffer: 16 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       shell: process.platform === "win32", // claude.cmd no Windows
     });
   } catch (err) {
