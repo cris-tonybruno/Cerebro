@@ -3,7 +3,7 @@ import { runTurn } from "@/lib/brain";
 import { transcribe } from "@/lib/stt";
 import { synthesize } from "@/lib/tts";
 import { resolvePlace, updateCurrentLocation } from "@/lib/geo";
-import { describeImage, extractDoc, storeFile } from "@/lib/media";
+import { describeImage, extractDoc, storeFile, lessonsFor } from "@/lib/media";
 
 // M2.5 — Corpo provisório: bot do Telegram ligado no mesmo cérebro.
 // Segurança: (1) secret token do webhook no header, (2) só responde ao chat do Cris.
@@ -123,9 +123,10 @@ export async function POST(req: Request) {
     attachmentPath = await storeFile("photos", datedPath("jpg"), bytes, "image/jpeg");
     const description = await describeImage(bytes, "image/jpeg");
     const caption = (msg.caption ?? "").trim();
+    const lessons = await lessonsFor(description);
     text =
       (caption ? `${caption}\n\n` : "") +
-      `[FOTO enviada pelo Cris — o que você vê nela]: ${description}`;
+      `[FOTO enviada pelo Cris — o que você vê nela]: ${description}${lessons}`;
   }
 
   // Documento → guarda + extrai (M7). Imagem mandada "como arquivo" é tratada como foto.
@@ -147,9 +148,10 @@ export async function POST(req: Request) {
       modality = "image";
       attachmentPath = await storeFile("photos", datedPath(ext), bytes, mime);
       const description = await describeImage(bytes, mime);
+      const lessons = await lessonsFor(description);
       text =
         (caption ? `${caption}\n\n` : "") +
-        `[FOTO enviada pelo Cris — o que você vê nela]: ${description}`;
+        `[FOTO enviada pelo Cris — o que você vê nela]: ${description}${lessons}`;
     } else {
       modality = "doc";
       attachmentPath = await storeFile("docs", datedPath(ext), bytes, mime);

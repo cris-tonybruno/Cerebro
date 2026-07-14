@@ -6,11 +6,13 @@ import { Geo, resolvePlace } from "./geo";
 import { toggleProtocol } from "./protocols";
 import { getLatestDigest } from "./digest";
 import { openProject, closeProject, projectStatus, updateProjectNotes, Project } from "./projects";
+import { teachVision } from "./media";
 
 export type ToolContext = {
   geo?: Geo | null;
   place?: string | null;
   project?: Project | null;
+  session_id?: string;
 };
 
 // M3 — Ferramentas do roteador (rota B da diretiva §3.3).
@@ -174,6 +176,29 @@ export const toolDefs: Anthropic.Tool[] = [
     },
   },
   {
+    name: "vision_teach",
+    description:
+      "Treinamento de visão (apprentice): registra o que o Cris ensinou sobre uma foto recém-enviada. " +
+      "Use quando ele CORRIGIR ou ROTULAR o que aparece na última foto ('isso é blocking, não stud', " +
+      "'esse é o canteiro da Innovation', 'essa ferramenta é um framing nailer'). " +
+      "Use confirm=true quando ele apenas CONFIRMAR que sua identificação estava certa ('isso mesmo', 'acertou'). " +
+      "Com o tempo você identifica sozinho e só pede confirmação.",
+    input_schema: {
+      type: "object",
+      properties: {
+        label: {
+          type: "string",
+          description: "O que a coisa É, nas palavras do Cris (vazio se for só confirmação)",
+        },
+        confirm: {
+          type: "boolean",
+          description: "true = o Cris confirmou uma identificação que você já fez",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "recall_past",
     description:
       "Busca na memória de LONGO PRAZO do cérebro: conversas antigas com o Cris e pesquisas " +
@@ -264,6 +289,13 @@ export async function executeTool(
         break;
       case "project_notes_update":
         result = await updateProjectNotes(String(input.notes ?? ""));
+        break;
+      case "vision_teach":
+        result = await teachVision(
+          String(input.label ?? ""),
+          ctx.session_id ?? "",
+          Boolean(input.confirm)
+        );
         break;
       case "place_save":
         result = await placeSave(input, ctx);

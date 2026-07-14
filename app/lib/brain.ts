@@ -127,7 +127,12 @@ export async function runTurn(
   attachmentPath?: string | null
 ): Promise<TurnResult> {
   const ctx = await getContext(message, session_id, geo, source);
-  const toolCtx: ToolContext = { geo: ctx.geo, place: ctx.place, project: ctx.project };
+  const toolCtx: ToolContext = {
+    geo: ctx.geo,
+    place: ctx.place,
+    project: ctx.project,
+    session_id,
+  };
 
   const messages: Anthropic.MessageParam[] = [
     ...ctx.history,
