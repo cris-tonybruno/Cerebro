@@ -3,8 +3,10 @@ import { sb } from "./supabase";
 import { embed } from "./embeddings";
 import { logUsage } from "./costs";
 import { buildSystemPrompt, RetrievedMemory } from "./principal";
+import { toolDefs, executeTool } from "./tools";
 
 // O miolo do cérebro, compartilhado entre as bocas (PWA streaming, Telegram, futuras).
+// M3: loop agêntico — o Principal decide entre responder direto ou usar ferramentas.
 
 export const CHAT_MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-4-8";
 const MEMORY_MODEL = process.env.CLAUDE_MEMORY_MODEL ?? "claude-haiku-4-5";
@@ -49,35 +51,103 @@ export async function getContext(message: string, session_id: string): Promise<T
   };
 }
 
+export type TurnResult = {
+  text: string;
+  route: "direct" | "tool";
+  toolsUsed: string[];
+};
+
+const MAX_TOOL_ROUNDS = 4;
+
+// O turno completo com roteamento: streaming opcional via onDelta.
+// Rota A (direct): Claude responde sem ferramenta. Rota B (tool): executa e continua.
+export async function runTurn(
+  message: string,
+  session_id: string,
+  modality: "text" | "voice" = "text",
+  onDelta?: (text: string) => void
+): Promise<TurnResult> {
+  const ctx = await getContext(message, session_id);
+
+  const messages: Anthropic.MessageParam[] = [
+    ...ctx.history,
+    { role: "user", content: message },
+  ];
+  const toolsUsed: string[] = [];
+  let fullText = "";
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const stream = anthropic.messages.stream({
+      model: CHAT_MODEL,
+      max_tokens: 8192,
+      system: ctx.system,
+      tools: toolDefs,
+      messages,
+    });
+
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        fullText += event.delta.text;
+        onDelta?.(event.delta.text);
+      }
+    }
+
+    const final = await stream.finalMessage();
+    await logUsage({
+      provider: "anthropic",
+      model: CHAT_MODEL,
+      purpose: "chat",
+      input_tokens: final.usage.input_tokens,
+      output_tokens: final.usage.output_tokens,
+    });
+
+    if (final.stop_reason !== "tool_use") break;
+
+    // Rota B: executa cada ferramenta pedida e devolve os resultados
+    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    for (const block of final.content) {
+      if (block.type === "tool_use") {
+        toolsUsed.push(block.name);
+        const result = await executeTool(block.name, block.input as Record<string, unknown>);
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: result,
+        });
+      }
+    }
+    messages.push({ role: "assistant", content: final.content });
+    messages.push({ role: "user", content: toolResults });
+
+    const sep = fullText.length > 0 && !fullText.endsWith("\n") ? "\n" : "";
+    if (sep) {
+      fullText += sep;
+      onDelta?.(sep);
+    }
+  }
+
+  const route: "direct" | "tool" = toolsUsed.length > 0 ? "tool" : "direct";
+  await persistTurn(
+    session_id,
+    message,
+    ctx.msgEmbedding,
+    fullText,
+    ctx.memories,
+    modality,
+    route,
+    toolsUsed[0] ?? null
+  );
+
+  return { text: fullText, route, toolsUsed };
+}
+
 // Resposta completa (sem streaming) — usada pelo Telegram e futuras integrações.
 export async function answerOnce(
   message: string,
   session_id: string,
   modality: "text" | "voice" = "text"
 ): Promise<string> {
-  const ctx = await getContext(message, session_id);
-
-  const response = await anthropic.messages.create({
-    model: CHAT_MODEL,
-    max_tokens: 8192,
-    system: ctx.system,
-    messages: [...ctx.history, { role: "user", content: message }],
-  });
-
-  await logUsage({
-    provider: "anthropic",
-    model: CHAT_MODEL,
-    purpose: "chat",
-    input_tokens: response.usage.input_tokens,
-    output_tokens: response.usage.output_tokens,
-  });
-
-  const text = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-
-  await persistTurn(session_id, message, ctx.msgEmbedding, text, ctx.memories, modality);
+  const { text } = await runTurn(message, session_id, modality);
   return text;
 }
 
@@ -87,7 +157,9 @@ export async function persistTurn(
   msgEmbedding: number[],
   responseText: string,
   retrievedMemories: RetrievedMemory[],
-  modality: string = "text"
+  modality: string = "text",
+  route: string = "direct",
+  toolName: string | null = null
 ) {
   const now = new Date().toISOString();
   const extraction = await extractMemories(message, responseText);
@@ -102,7 +174,8 @@ export async function persistTurn(
       role: "cris",
       modality,
       content: message,
-      route: "direct",
+      route,
+      tool_name: toolName,
       local_datetime: now,
       timezone: TZ,
       zone,
@@ -117,7 +190,8 @@ export async function persistTurn(
     role: "brain",
     modality,
     content: responseText,
-    route: "direct",
+    route,
+    tool_name: toolName,
     local_datetime: now,
     timezone: TZ,
     zone,
@@ -131,7 +205,8 @@ export async function persistTurn(
     context: {
       datetime: now,
       timezone: TZ,
-      route: "direct",
+      route,
+      tool_name: toolName,
       retrieved_memories: retrievedMemories.map((m) => m.content),
     },
     tags: ["m1", zone],
