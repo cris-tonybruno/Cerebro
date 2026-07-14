@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { sb } from "./supabase";
 import { embed } from "./embeddings";
 import { logUsage, monthUsage } from "./costs";
+import { getProfile } from "./profile";
 
 // M4 — O Conselho (diretiva §3.4, padrão Karpathy adaptado):
 // Estágio 1: opiniões em paralelo (4 membros via OpenRouter + Claude)
@@ -105,8 +106,18 @@ export async function runCouncil(question: string): Promise<string> {
           .join("\n")}\n\n`
       : "";
 
+  // O EU VIRTUAL: em toda deliberação, o conselho decide "como o Cris decidiria".
+  // Perfil CURADO pelo próprio Cris — seguro para conselheiros externos.
+  const profile = await getProfile();
+  const euVirtual = profile
+    ? `═══ O DONO DA DECISÃO ═══\n${profile.content}\n═══════════════════════\n` +
+      `Regra de deliberação: os FATOS da questão são dados — aceite-os. Mas a decisão deve ` +
+      `servir a ESTA pessoa, com estes valores e critérios. Não recomende o genérico; ` +
+      `recomende o que serve ao dono.\n\n`
+    : "";
+
   const stage1Prompt = (q: string) =>
-    `${context}Você é um conselheiro sênior. Dê sua opinião fundamentada e direta sobre a questão abaixo. ` +
+    `${euVirtual}${context}Você é um conselheiro sênior. Dê sua opinião fundamentada e direta sobre a questão abaixo. ` +
     `Seja específico, tome posição, aponte riscos. Responda em português. Máximo ~300 palavras.\n\nQUESTÃO: ${q}`;
 
   // ── Estágio 1: opiniões em paralelo ──────────────────────────

@@ -7,6 +7,7 @@ import { toggleProtocol } from "./protocols";
 import { getLatestDigest } from "./digest";
 import { openProject, closeProject, projectStatus, updateProjectNotes, Project } from "./projects";
 import { teachVision } from "./media";
+import { getProfile, updateProfile } from "./profile";
 
 export type ToolContext = {
   geo?: Geo | null;
@@ -176,6 +177,29 @@ export const toolDefs: Anthropic.Tool[] = [
     },
   },
   {
+    name: "profile_get",
+    description:
+      "Lê o EU VIRTUAL — o perfil curado do Cris que representa ele em toda deliberação do conselho " +
+      "(valores, filosofia de decisão, prioridades). Use quando o Cris pedir para ver/revisar o perfil, " +
+      "ou ANTES de profile_update (o novo texto substitui o antigo por inteiro).",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "profile_update",
+    description:
+      "Atualiza o EU VIRTUAL. Use quando o Cris pedir para mudar o perfil dele ou expressar mudança " +
+      "durável de valores/prioridades que ele queira refletida ('atualiza meu perfil: ...'). " +
+      "SEMPRE leia o atual primeiro (profile_get), aplique a mudança preservando o resto, e envie o " +
+      "documento COMPLETO. Confirme com o Cris o texto antes de gravar se a mudança for grande.",
+    input_schema: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "O documento completo novo (substitui o antigo)" },
+      },
+      required: ["content"],
+    },
+  },
+  {
     name: "vision_teach",
     description:
       "Treinamento de visão (apprentice): registra o que o Cris ensinou sobre uma foto recém-enviada. " +
@@ -314,6 +338,14 @@ export async function executeTool(
         break;
       case "project_notes_update":
         result = await updateProjectNotes(String(input.notes ?? ""));
+        break;
+      case "profile_get": {
+        const p = await getProfile();
+        result = p ? `[versão ${p.version}]\n${p.content}` : "perfil ainda não criado";
+        break;
+      }
+      case "profile_update":
+        result = await updateProfile(String(input.content ?? ""));
         break;
       case "vision_teach":
         result = await teachVision(

@@ -70,6 +70,17 @@ Migrations vivem AQUI, em `supabase/migrations/` — não em `onsite-core-db`.
   Claude Principal + memória write/read com zonas + Memory Browser + botão export + contador
   de custo. Sem voz, sem conselho, sem polimento — deliberadamente feio.
 
+## Regra do Eu Virtual (deliberações do conselho)
+
+Existe um **perfil curado do Cris** (`creator_profile` no banco, editável por voz via
+`profile_get`/`profile_update`) que entra em **TODA deliberação do conselho**, sobre qualquer
+projeto. A regra de deliberação: **os FATOS vêm do projeto (aceitos como dados); os VALORES e
+o critério de decisão vêm do Eu Virtual** — o conselho decide "como o Cris decidiria".
+
+Pureza generalizada (herdada da ponte de Éon): o raciocínio de deliberação vive só no lado
+Cérebro (`council_sessions`). Projetos que tenham corpus/mente própria (ex.: Éon) **jamais**
+recebem esse raciocínio de volta — o projeto não sabe que é deliberado.
+
 ## Custódia de Éon (módulo futuro — milestone a definir)
 
 O Cérebro será o zelador do universo simulado Éon (`c:\Dev\lab\thomasz-kroll\eon`), projeto
