@@ -187,11 +187,12 @@ export async function runCouncil(question: string): Promise<string> {
         .join("\n\n")}\n` +
       personalContext +
       `\nProduza a decisão final do conselho em português, no formato:\n` +
-      `1. RECOMENDAÇÃO (a posição do conselho, clara e acionável)\n` +
-      `2. DISSENSO MAIS FORTE (o melhor argumento contrário)\n` +
-      `3. LEITURA PESSOAL (o aval de quem conhece o Cris: como esta decisão conversa com a vida, ` +
+      `1. PLACAR (se as opiniões formarem posições contáveis, ex: 4 a 1 pelo .ca — senão omita)\n` +
+      `2. RECOMENDAÇÃO (a posição do conselho, clara e acionável)\n` +
+      `3. DISSENSO MAIS FORTE (o melhor argumento contrário)\n` +
+      `4. LEITURA PESSOAL (o aval de quem conhece o Cris: como esta decisão conversa com a vida, ` +
       `a família e o momento dele — ajuste ou reforce a recomendação à luz disso, sem expor detalhes íntimos desnecessariamente)\n` +
-      `4. CONFIANÇA (alta/média/baixa + uma linha do porquê)\n` +
+      `5. CONFIANÇA (alta/média/baixa + uma linha do porquê)\n` +
       `Fale como quem fala, não como quem redige ata. Seja direto.`,
     700
   );

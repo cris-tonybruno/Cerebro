@@ -38,7 +38,7 @@ export const toolDefs: Anthropic.Tool[] = [
         },
         zone: {
           type: "string",
-          enum: ["pessoal", "negocios", "criativo", "familia"],
+          enum: ["pessoal", "familia", "trabalho", "projetos", "escrita"],
           description: "Zona de privacidade",
         },
       },
@@ -587,7 +587,7 @@ async function noteSave(input: Record<string, unknown>): Promise<string> {
   const { error } = await sb().from("memories").insert({
     kind: (input.kind as string) ?? "fact",
     content,
-    zone: (input.zone as string) ?? "negocios",
+    zone: (input.zone as string) ?? "trabalho",
     confidence: 1.0, // pedido explícito do Cris = confiança máxima
     embedding,
   });

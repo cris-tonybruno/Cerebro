@@ -236,7 +236,7 @@ export async function persistTurn(
 ) {
   const now = new Date().toISOString();
   const extraction = await extractMemories(message, responseText);
-  const zone = extraction?.turn_zone ?? "negocios";
+  const zone = extraction?.turn_zone ?? "trabalho";
   const geoCols = {
     lat: turnCtx?.geo?.lat ?? null,
     lng: turnCtx?.geo?.lng ?? null,
@@ -316,12 +316,12 @@ export async function persistTurn(
 type ExtractedMemory = {
   kind: "fact" | "preference" | "person" | "place" | "routine" | "marco";
   content: string;
-  zone: "pessoal" | "negocios" | "criativo" | "familia";
+  zone: "pessoal" | "familia" | "trabalho" | "projetos" | "escrita";
   confidence: number;
 };
 
 type Extraction = {
-  turn_zone: "pessoal" | "negocios" | "criativo" | "familia";
+  turn_zone: "pessoal" | "familia" | "trabalho" | "projetos" | "escrita";
   memories: ExtractedMemory[];
 };
 
@@ -339,7 +339,7 @@ async function extractMemories(message: string, response: string): Promise<Extra
             properties: {
               turn_zone: {
                 type: "string",
-                enum: ["pessoal", "negocios", "criativo", "familia"],
+                enum: ["pessoal", "familia", "trabalho", "projetos", "escrita"],
               },
               memories: {
                 type: "array",
@@ -353,7 +353,7 @@ async function extractMemories(message: string, response: string): Promise<Extra
                     content: { type: "string" },
                     zone: {
                       type: "string",
-                      enum: ["pessoal", "negocios", "criativo", "familia"],
+                      enum: ["pessoal", "familia", "trabalho", "projetos", "escrita"],
                     },
                     confidence: { type: "number" },
                   },
@@ -373,7 +373,7 @@ async function extractMemories(message: string, response: string): Promise<Extra
           content: `Você é o classificador de memória do cérebro pessoal do Cris.
 
 Analise este turno de conversa e:
-1. Classifique a zona do turno: pessoal | negocios | criativo | familia
+1. Classifique a zona do turno: pessoal | familia | trabalho | projetos | escrita
 2. Extraia de 0 a 3 memórias semânticas DURÁVEIS sobre o Cris, a vida dele, as pessoas dele,
    os projetos dele ou as preferências dele. Frases simples e legíveis em português.
    Só extraia o que vale lembrar daqui a meses. Conversa trivial = zero memórias.

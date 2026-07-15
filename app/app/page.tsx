@@ -2,10 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import BottomNav from "@/components/BottomNav";
 
 type Msg = { role: "cris" | "brain"; content: string };
-type Costs = { month_cad: number; budget_cad: number; pct: number };
 type MicState = "idle" | "recording" | "transcribing";
+type Home = {
+  place: string | null;
+  tempC: number | null;
+  month_cad: number;
+  budget_cad: number;
+  pct: number;
+  activeProtocols: string[];
+  project: { name: string } | null;
+  aguardando_decisao: number;
+};
 type Approval = { id: string; created_at: string; action: string; summary: string; status: string };
 
 function getSessionId(): string {
@@ -17,15 +27,33 @@ function getSessionId(): string {
   return id;
 }
 
-export default function ChatPage() {
+function saudacao(): string {
+  const h = new Date().getHours();
+  if (h < 5) return "Boa madrugada, senhor.";
+  if (h < 12) return "Bom dia, senhor.";
+  if (h < 18) return "Boa tarde, senhor.";
+  return "Boa noite, senhor.";
+}
+
+function dataDeHoje(): string {
+  const s = new Date().toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export default function OliverPage() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [costs, setCosts] = useState<Costs | null>(null);
+  const [home, setHome] = useState<Home | null>(null);
   const [mic, setMic] = useState<MicState>("idle");
   const [speaker, setSpeaker] = useState(true);
   const [speaking, setSpeaking] = useState(false);
   const [recSeconds, setRecSeconds] = useState(0);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -35,20 +63,33 @@ export default function ChatPage() {
 
   useEffect(() => {
     setSpeaker(localStorage.getItem("cerebro_speaker") !== "off");
-    // GPS é constante nos movimentos do Cérebro (M5): acompanha a posição em background
     if ("geolocation" in navigator) {
       const watchId = navigator.geolocation.watchPosition(
         (pos) => {
           geoRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         },
-        () => {}, // permissão negada → segue sem GPS, sem drama
+        () => {},
         { enableHighAccuracy: false, maximumAge: 120000, timeout: 15000 }
       );
       return () => navigator.geolocation.clearWatch(watchId);
     }
   }, []);
 
-  // Silenciar: corta a fala em curso NA HORA e desliga as próximas
+  useEffect(() => {
+    fetch("/api/home")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setHome)
+      .catch(() => {});
+    fetch("/api/approvals")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setApprovals((j?.approvals ?? []).filter((a: Approval) => a.status === "pending")))
+      .catch(() => {});
+  }, [sending]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   function toggleSpeaker() {
     const next = !speaker;
     setSpeaker(next);
@@ -66,7 +107,7 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!res.ok) return; // 503 = TTS não configurado; segue mudo
+      if (!res.ok) return;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       audioRef.current?.pause();
@@ -80,23 +121,9 @@ export default function ChatPage() {
       setSpeaking(true);
       await audio.play();
     } catch {
-      // autoplay bloqueado ou rede — falha silenciosa, o texto já está na tela
       setSpeaking(false);
     }
   }
-
-  const [approvals, setApprovals] = useState<Approval[]>([]);
-
-  useEffect(() => {
-    fetch("/api/costs")
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setCosts)
-      .catch(() => {});
-    fetch("/api/approvals")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setApprovals((j?.approvals ?? []).filter((a: Approval) => a.status === "pending")))
-      .catch(() => {});
-  }, [sending]);
 
   async function decide(id: string, decision: "approved" | "denied") {
     setApprovals((a) => a.filter((x) => x.id !== id));
@@ -106,10 +133,6 @@ export default function ChatPage() {
       body: JSON.stringify({ id, decision }),
     }).catch(() => {});
   }
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   async function send(text: string, modality: "text" | "voice" = "text") {
     const trimmed = text.trim();
@@ -131,7 +154,6 @@ export default function ChatPage() {
         }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let fullResponse = "";
@@ -142,23 +164,17 @@ export default function ChatPage() {
         fullResponse += chunk;
         setMessages((m) => {
           const copy = [...m];
-          copy[copy.length - 1] = {
-            role: "brain",
-            content: copy[copy.length - 1].content + chunk,
-          };
+          copy[copy.length - 1] = { role: "brain", content: copy[copy.length - 1].content + chunk };
           return copy;
         });
       }
-      // turno de voz → resposta falada (se o alto-falante estiver ligado)
-      if (modality === "voice" && speaker && fullResponse.trim()) {
-        speak(fullResponse);
-      }
+      if (modality === "voice" && speaker && fullResponse.trim()) speak(fullResponse);
     } catch {
       setMessages((m) => {
         const copy = [...m];
         copy[copy.length - 1] = {
           role: "brain",
-          content: copy[copy.length - 1].content || "[erro de conexão — tenta de novo]",
+          content: copy[copy.length - 1].content || "[erro de conexão — tenta de novo, senhor]",
         };
         return copy;
       });
@@ -169,12 +185,10 @@ export default function ChatPage() {
 
   async function toggleMic() {
     if (mic === "transcribing") return;
-
     if (mic === "recording") {
       recorderRef.current?.stop();
       return;
     }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
@@ -192,13 +206,9 @@ export default function ChatPage() {
           form.append("audio", blob, "audio.webm");
           const res = await fetch("/api/listen", { method: "POST", body: form });
           const json = await res.json();
-          if (res.ok && json.text) {
-            await send(json.text, "voice");
-          } else if (res.ok) {
-            setInput("(não entendi o áudio — tenta de novo)");
-          }
+          if (res.ok && json.text) await send(json.text, "voice");
         } catch {
-          setInput("(erro na transcrição)");
+          /* segue */
         } finally {
           setMic("idle");
         }
@@ -209,88 +219,144 @@ export default function ChatPage() {
       setRecSeconds(0);
       recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
     } catch {
-      alert("Não consegui acessar o microfone. Verifica a permissão do browser.");
+      alert("Não consegui acessar o microfone, senhor. Verifique a permissão do browser.");
     }
   }
 
-  function newSession() {
+  function novaSessao() {
     localStorage.setItem("cerebro_session", crypto.randomUUID());
     setMessages([]);
   }
 
-  const pctWarn = costs && costs.pct >= 80;
+  const repouso = messages.length === 0;
+  const pctWarn = home && home.pct >= 80;
 
   return (
     <div className="flex-1 flex flex-col max-w-2xl w-full mx-auto h-dvh">
-      <header className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-        <h1 className="font-bold tracking-widest text-sm">CÉREBRO</h1>
-        <div className="flex items-center gap-3 text-xs text-zinc-400">
-          {costs && (
-            <span className={pctWarn ? "text-amber-400 font-semibold" : ""}>
-              ${costs.month_cad.toFixed(2)} / ${costs.budget_cad} CAD
-            </span>
+      {/* ── cabeçalho ── */}
+      <header className="px-5 pt-5 pb-2">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1
+              className={`font-[family-name:var(--font-serif-display)] text-foreground ${repouso ? "text-3xl" : "text-lg"}`}
+            >
+              {saudacao()}
+            </h1>
+            <p className="text-muted text-xs mt-1">
+              {dataDeHoje()}
+              {home?.place ? ` · ${home.place}` : ""}
+              {home?.tempC != null ? ` · ${home.tempC}°C` : ""}
+            </p>
+            {repouso && <p className="text-muted text-xs mt-2">Às suas ordens.</p>}
+          </div>
+          {home && (
+            <div className="text-right shrink-0">
+              <p className={`font-[family-name:var(--font-geist-mono)] text-sm ${pctWarn ? "text-amber-400" : "text-gold"}`}>
+                ${home.month_cad.toFixed(2)}
+              </p>
+              <div className="w-16 h-0.5 bg-line mt-1 ml-auto">
+                <div
+                  className="h-0.5 bg-gold"
+                  style={{ width: `${Math.min(100, home.pct)}%` }}
+                />
+              </div>
+              <p className="etiqueta text-muted mt-1">de ${home.budget_cad}/mês</p>
+            </div>
           )}
-          <Link href="/memory" className="underline underline-offset-2">
-            memória
-          </Link>
-          <Link href="/council" className="underline underline-offset-2">
-            conselho
-          </Link>
-          <Link href="/audit" className="underline underline-offset-2">
-            audit
-          </Link>
-          <a href="/api/export?format=json" className="underline underline-offset-2">
-            export
-          </a>
-          <button onClick={newSession} className="underline underline-offset-2">
-            nova
-          </button>
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.length === 0 && (
-          <p className="text-zinc-500 text-sm text-center mt-16">
-            Fala comigo — por texto ou pelo 🎤. Eu escuto, lembro e respondo.
+      {/* ── corpo ── */}
+      {repouso ? (
+        <main className="flex-1 flex flex-col items-center justify-center px-5 gap-8">
+          <button
+            onClick={toggleMic}
+            className={`anel w-44 h-44 text-6xl select-none ${
+              mic === "recording" ? "anel-vivo" : mic === "transcribing" ? "opacity-60" : ""
+            }`}
+          >
+            {mic === "transcribing" ? "…" : "O"}
+          </button>
+          <p className="etiqueta text-muted -mt-4">
+            {mic === "recording"
+              ? `ouvindo · ${Math.floor(recSeconds / 60)}:${String(recSeconds % 60).padStart(2, "0")} · toque para enviar`
+              : mic === "transcribing"
+                ? "transcrevendo…"
+                : "toque e fale"}
           </p>
-        )}
-        {messages.map((m, i) => (
-          <div key={i} className={m.role === "cris" ? "flex justify-end" : "flex justify-start"}>
-            <div
-              className={
-                m.role === "cris"
-                  ? "bg-zinc-100 text-zinc-950 rounded-2xl rounded-br-sm px-4 py-2 max-w-[85%] whitespace-pre-wrap"
-                  : "bg-zinc-800 text-zinc-100 rounded-2xl rounded-bl-sm px-4 py-2 max-w-[85%] whitespace-pre-wrap"
-              }
-            >
-              {m.content || (sending && i === messages.length - 1 ? "…" : "")}
-            </div>
-          </div>
-        ))}
-        <div ref={bottomRef} />
-      </main>
 
+          {home && (home.activeProtocols.length > 0 || home.project || home.aguardando_decisao > 0) && (
+            <div className="w-full">
+              <p className="etiqueta text-muted mb-2">Ativos agora</p>
+              <div className="flex flex-wrap gap-2">
+                {home.activeProtocols.map((p) => (
+                  <span key={p} className="px-3 py-1.5 rounded-lg border border-golddim text-gold text-xs">
+                    Protocolo {p}
+                  </span>
+                ))}
+                {home.project && (
+                  <Link
+                    href="/projeto"
+                    className="px-3 py-1.5 rounded-lg border border-line text-foreground text-xs"
+                  >
+                    Projeto · {home.project.name}
+                  </Link>
+                )}
+                {home.aguardando_decisao > 0 && (
+                  <Link
+                    href="/projeto"
+                    className="px-3 py-1.5 rounded-lg border border-gold bg-gold/10 text-gold text-xs"
+                  >
+                    ✋ {home.aguardando_decisao} aguardando decisão
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-4 etiqueta text-muted">
+            <Link href="/projeto">projeto</Link>
+            <Link href="/council">conselho</Link>
+            <Link href="/audit">auditoria</Link>
+            <a href="/api/export?format=json">exportar</a>
+          </div>
+        </main>
+      ) : (
+        <main className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
+          {messages.map((m, i) => (
+            <div key={i} className={m.role === "cris" ? "flex justify-end" : "flex justify-start"}>
+              <div
+                className={
+                  m.role === "cris"
+                    ? "bg-panel2 border border-line rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] whitespace-pre-wrap text-sm"
+                    : "bg-panel border border-line rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-[85%] whitespace-pre-wrap text-sm"
+                }
+              >
+                {m.content || (sending && i === messages.length - 1 ? "…" : "")}
+              </div>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </main>
+      )}
+
+      {/* ── approval cards ── */}
       {approvals.length > 0 && (
-        <div className="px-4 pb-2 space-y-2">
+        <div className="px-5 pb-2 space-y-2">
           {approvals.map((a) => (
-            <div
-              key={a.id}
-              className="rounded-xl border-2 border-amber-500 bg-amber-950/40 p-3 space-y-2"
-            >
-              <p className="text-xs font-bold text-amber-400 tracking-wide">
-                ✋ APROVAÇÃO NECESSÁRIA
-              </p>
+            <div key={a.id} className="rounded-xl border border-gold bg-gold/10 p-3 space-y-2">
+              <p className="etiqueta text-gold">✋ Aprovação necessária</p>
               <p className="text-sm">{a.summary}</p>
               <div className="flex gap-2">
                 <button
                   onClick={() => decide(a.id, "approved")}
-                  className="flex-1 rounded-lg bg-emerald-600 text-white py-2 text-sm font-semibold"
+                  className="flex-1 rounded-lg bg-gold text-background py-2 text-sm font-semibold"
                 >
                   Aprovar
                 </button>
                 <button
                   onClick={() => decide(a.id, "denied")}
-                  className="flex-1 rounded-lg bg-zinc-800 border border-zinc-600 py-2 text-sm"
+                  className="flex-1 rounded-lg border border-line py-2 text-sm text-muted"
                 >
                   Negar
                 </button>
@@ -300,73 +366,72 @@ export default function ChatPage() {
         </div>
       )}
 
-      <footer className="px-4 pb-4 pt-2 border-t border-zinc-800">
-        <div className="flex gap-2 items-end">
-          <button
-            onClick={toggleMic}
-            disabled={sending}
-            title={mic === "recording" ? "Parar, transcrever e enviar" : "Gravar áudio"}
-            className={`rounded-xl px-4 py-3 text-lg border transition-colors disabled:opacity-40 min-w-[64px] ${
-              mic === "recording"
-                ? "bg-red-600 border-red-500 animate-pulse font-mono text-sm"
+      {/* ── entrada (conversa) ── */}
+      {!repouso && (
+        <footer className="px-4 pb-2 pt-2 border-t border-line">
+          <div className="flex gap-2 items-end">
+            <button
+              onClick={toggleMic}
+              disabled={sending}
+              className={`anel w-12 h-12 text-xl shrink-0 disabled:opacity-40 ${
+                mic === "recording" ? "anel-vivo" : ""
+              }`}
+            >
+              {mic === "recording"
+                ? `${recSeconds}s`
                 : mic === "transcribing"
-                  ? "bg-zinc-800 border-zinc-700 opacity-60"
-                  : "bg-zinc-900 border-zinc-700"
-            }`}
-          >
-            {mic === "recording"
-              ? `■ ${Math.floor(recSeconds / 60)}:${String(recSeconds % 60).padStart(2, "0")}`
-              : mic === "transcribing"
-                ? "…"
-                : "🎤"}
+                  ? "…"
+                  : "O"}
+            </button>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send(input);
+                }
+              }}
+              rows={1}
+              placeholder={mic === "recording" ? "ouvindo, senhor…" : "Escreva, senhor…"}
+              className="flex-1 resize-none rounded-xl bg-panel border border-line px-4 py-3 text-sm outline-none focus:border-golddim"
+            />
+            <button
+              onClick={toggleSpeaker}
+              className={`rounded-xl px-3 py-3 border text-sm ${
+                speaking ? "border-gold text-gold anel-vivo" : speaker ? "border-line" : "border-line opacity-40"
+              }`}
+            >
+              {speaker ? "🔊" : "🔇"}
+            </button>
+            <button
+              onClick={() => send(input)}
+              disabled={sending || !input.trim()}
+              className="rounded-xl bg-gold text-background px-4 py-3 font-semibold disabled:opacity-40"
+            >
+              ➤
+            </button>
+          </div>
+          <button onClick={novaSessao} className="etiqueta text-muted mt-2">
+            nova sessão
           </button>
-          <textarea
+        </footer>
+      )}
+
+      {/* ── entrada de texto no repouso ── */}
+      {repouso && (
+        <div className="px-5 pb-2">
+          <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send(input);
-              }
-            }}
-            rows={1}
-            placeholder={
-              mic === "recording"
-                ? "gravando… fala à vontade, aperta ■ quando terminar"
-                : mic === "transcribing"
-                  ? "transcrevendo…"
-                  : "Escreve aqui…"
-            }
-            className="flex-1 resize-none rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 text-zinc-100 outline-none focus:border-zinc-500"
+            onKeyDown={(e) => e.key === "Enter" && send(input)}
+            placeholder="ou escreva, senhor…"
+            className="w-full rounded-xl bg-panel border border-line px-4 py-2.5 text-sm outline-none focus:border-golddim"
           />
-          <button
-            onClick={toggleSpeaker}
-            title={
-              speaking
-                ? "Calar agora"
-                : speaker
-                  ? "Voz ligada — toca pra silenciar"
-                  : "Voz desligada — toca pra ligar"
-            }
-            className={`rounded-xl px-4 py-3 text-lg border transition-colors ${
-              speaking
-                ? "bg-emerald-700 border-emerald-500 animate-pulse"
-                : speaker
-                  ? "bg-zinc-900 border-zinc-700"
-                  : "bg-zinc-900 border-zinc-800 opacity-50"
-            }`}
-          >
-            {speaker ? "🔊" : "🔇"}
-          </button>
-          <button
-            onClick={() => send(input)}
-            disabled={sending || !input.trim()}
-            className="rounded-xl bg-zinc-100 text-zinc-950 px-5 py-3 font-semibold disabled:opacity-40"
-          >
-            ➤
-          </button>
         </div>
-      </footer>
+      )}
+
+      <BottomNav active="home" />
     </div>
   );
 }

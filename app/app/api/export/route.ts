@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   ]);
 
   if (format === "md") {
-    const zones = ["pessoal", "familia", "negocios", "criativo"];
+    const zones = ["pessoal", "familia", "trabalho", "projetos", "escrita"];
     let md = `# Cérebro — Export de Memória\n\nExportado em ${new Date().toISOString()}\n`;
     for (const zone of zones) {
       const inZone = (memories.data ?? []).filter((m) => m.zone === zone && !m.archived);

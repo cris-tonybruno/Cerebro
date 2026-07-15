@@ -1,17 +1,32 @@
 @import "tailwindcss";
 
-/* Cérebro é dark sempre — não depende do modo do sistema (diretiva §3.1: dark, minimal) */
+/* OLIVER — ouro sobre escuro (mockups do Cris, 2026-07-14). Dark sempre. */
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
+  --background: #0c0e0c;
+  --foreground: #ece7db;
+  --panel: #131612;
+  --panel-2: #1a1e19;
+  --line: #262b25;
+  --gold: #c9a35c;
+  --gold-soft: #a8874e;
+  --gold-dim: #6e5c39;
+  --muted: #8b897c;
   color-scheme: dark;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel-2);
+  --color-line: var(--line);
+  --color-gold: var(--gold);
+  --color-goldsoft: var(--gold-soft);
+  --color-golddim: var(--gold-dim);
+  --color-muted: var(--muted);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-serif-display);
 }
 
 body {
@@ -24,9 +39,36 @@ textarea,
 input,
 select {
   color: var(--foreground);
-  caret-color: var(--foreground);
+  caret-color: var(--gold);
 }
 
 ::placeholder {
-  color: #71717a;
+  color: #6f6d62;
+}
+
+/* o anel-O */
+.anel {
+  border: 2px solid var(--gold);
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  font-family: var(--font-serif-display), Georgia, serif;
+  box-shadow: 0 0 40px rgba(201, 163, 92, 0.12), inset 0 0 30px rgba(201, 163, 92, 0.06);
+  transition: box-shadow 0.3s ease;
+}
+.anel-vivo {
+  animation: respira 1.6s ease-in-out infinite;
+}
+@keyframes respira {
+  0%, 100% { box-shadow: 0 0 30px rgba(201, 163, 92, 0.15), inset 0 0 30px rgba(201, 163, 92, 0.08); }
+  50% { box-shadow: 0 0 70px rgba(201, 163, 92, 0.4), inset 0 0 40px rgba(201, 163, 92, 0.18); }
+}
+
+.etiqueta {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
