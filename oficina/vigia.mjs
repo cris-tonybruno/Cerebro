@@ -224,10 +224,10 @@ async function bootstrapJob(job) {
         }
       }
     } else {
-      repoNote = `⚠️ GitHub pendente: a conta ${spec.owner} não está logada no gh CLI (rode: gh auth login). Projeto existe localmente.`;
+      repoNote = `O projeto está seguro na oficina. Para eu também guardá-lo no GitHub ${spec.area === "pessoal" ? "pessoal" : "da empresa"}, preciso de uma autorização única do senhor no PC — a oficina sabe o passo.`;
     }
-  } catch (err) {
-    repoNote = `⚠️ GitHub pendente (${err.message.slice(0, 100)}). Projeto existe localmente.`;
+  } catch {
+    repoNote = `O projeto está seguro na oficina; a cópia no GitHub fica pendente por ora.`;
   }
 
   await setStatus(job.id, {
