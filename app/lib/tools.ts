@@ -237,6 +237,33 @@ export const toolDefs: Anthropic.Tool[] = [
     },
   },
   {
+    name: "project_bootstrap",
+    description:
+      "NASCE um projeto de código por voz: cria a pasta, o git e o repositório GitHub (via Vigia, " +
+      "no PC do Cris), registra o projeto e entra em Modo Projeto. Use no ritual de abertura " +
+      "DEPOIS de saber o NOME e ONDE salvar (pessoal ou empresa). Projetos novos usam pipeline " +
+      "direto nos despachos seguintes. Confirme ao senhor quando o Vigia avisar que nasceu.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nome do projeto. Ex: 'xpto'" },
+        area: {
+          type: "string",
+          enum: ["pessoal", "empresa"],
+          description:
+            "pessoal = c:\\Dev\\lab\\<slug>, GitHub cris-tonybruno · empresa = c:\\Dev\\<slug>, GitHub onsiteclub",
+        },
+        kind: {
+          type: "string",
+          enum: ["book", "app", "site", "client", "study"],
+          description: "Tipo, se inferível",
+        },
+        description: { type: "string", description: "Uma frase sobre o que é o projeto" },
+      },
+      required: ["name", "area"],
+    },
+  },
+  {
     name: "dev_decide",
     description:
       "Registra a DECISÃO do Cris sobre um chamado construído pelo Vigia (status 'built'): " +
@@ -422,6 +449,47 @@ export async function executeTool(
       case "project_notes_update":
         result = await updateProjectNotes(String(input.notes ?? ""));
         break;
+      case "project_bootstrap": {
+        const name = String(input.name ?? "").trim();
+        if (!name) {
+          result = "nome do projeto vazio";
+          break;
+        }
+        const slug = name
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[̀-ͯ]/g, "")
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "");
+        const pessoal = input.area !== "empresa";
+        const workdir = pessoal ? `c:\\Dev\\lab\\${slug}` : `c:\\Dev\\${slug}`;
+        const owner = pessoal ? "cris-tonybruno" : "onsiteclub";
+
+        await openProject(name, input.kind as string | undefined);
+        await updateProjectNotes(
+          `ENDEREÇO: ${workdir} · GitHub: ${owner}/${slug} · área: ${pessoal ? "pessoal (lab)" : "empresa"}\n` +
+            `SOBRE: ${String(input.description ?? "(a definir)")}\nNascido por voz via OLIVER em ${new Date().toISOString().slice(0, 10)}.`
+        );
+
+        const { error: bootErr } = await sb().from("dev_backlog").insert({
+          request: `BOOTSTRAP: ${name}`,
+          job_type: "bootstrap",
+          pipeline: "direto",
+          workdir,
+          directive: JSON.stringify({
+            name,
+            slug,
+            owner,
+            description: String(input.description ?? ""),
+            area: pessoal ? "pessoal" : "empresa",
+          }),
+          status: "dispatched",
+        });
+        result = bootErr
+          ? `falha ao despachar o nascimento: ${bootErr.message}`
+          : `projeto "${name}" registrado e nascimento despachado ao Vigia (${workdir}, GitHub ${owner}/${slug}) — aviso chega no Telegram. Modo Projeto ativo.`;
+        break;
+      }
       case "dev_decide": {
         const hint = String(input.request_hint ?? "").trim();
         let q = sb()

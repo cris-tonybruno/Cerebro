@@ -14,7 +14,7 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -170,6 +170,64 @@ ${job.directive}`;
   }
 }
 
+// ── nasce um projeto (bootstrap): pasta + git + GitHub ───────
+async function bootstrapJob(job) {
+  const spec = JSON.parse(job.directive); // {name, slug, owner, description, area}
+  const workdir = resolve(job.workdir);
+  const short = job.id.slice(0, 8);
+  console.log(`\n🐣 bootstrap ${short}: ${spec.name} em ${workdir}`);
+
+  const wd = workdir.toLowerCase().replaceAll("\\", "/") + "/";
+  if (!WORKDIR_WHITELIST.some((w) => wd.startsWith(w.replaceAll("\\", "/")))) {
+    throw new Error(`workdir fora da whitelist: ${workdir}`);
+  }
+  if (existsSync(workdir)) throw new Error(`pasta já existe: ${workdir}`);
+
+  await setStatus(job.id, { status: "building" });
+  await telegram(`🐣 Vigia: nascendo o projeto "${spec.name}" em ${workdir}...`);
+
+  mkdirSync(workdir, { recursive: true });
+  git(workdir, ["init", "-b", "main"]);
+  writeFileSync(
+    resolve(workdir, "README.md"),
+    `# ${spec.name}\n\n${spec.description || "(descrição a definir)"}\n\n> Projeto nascido por voz via OLIVER em ${new Date().toISOString().slice(0, 10)}.\n`
+  );
+  writeFileSync(
+    resolve(workdir, "CLAUDE.md"),
+    `# ${spec.name}\n\n> Área: ${spec.area} · Endereço: ${workdir} · GitHub: ${spec.owner}/${spec.slug}\n> Nascido por voz via OLIVER (Cérebro). Chamados chegam pelo Vigia (dev_backlog),\n> pipeline DIRETO (projeto novo, sem produção).\n\n${spec.description || ""}\n`
+  );
+  git(workdir, ["add", "-A"]);
+  git(workdir, ["commit", "-q", "-m", `Nasce ${spec.name} (bootstrap por voz via OLIVER)`]);
+
+  // GitHub: usa o gh CLI com a conta certa, se disponível (credencial só no PC)
+  let repoNote = "";
+  try {
+    const accounts = execSync("gh auth status 2>&1", { encoding: "utf8" });
+    if (accounts.includes(spec.owner)) {
+      try { execSync(`gh auth switch --user ${spec.owner}`, { stdio: "ignore" }); } catch {}
+      execSync(`gh repo create ${spec.owner}/${spec.slug} --private --source . --push`, {
+        cwd: workdir,
+        stdio: "ignore",
+        timeout: 120_000,
+      });
+      repoNote = `GitHub: https://github.com/${spec.owner}/${spec.slug} (privado)`;
+    } else {
+      repoNote = `⚠️ GitHub pendente: a conta ${spec.owner} não está logada no gh CLI (rode: gh auth login). Projeto existe localmente.`;
+    }
+  } catch (err) {
+    repoNote = `⚠️ GitHub pendente (${err.message.slice(0, 100)}). Projeto existe localmente.`;
+  }
+
+  await setStatus(job.id, {
+    status: "merged",
+    resolved_at: new Date().toISOString(),
+    resolution: `nascido em ${workdir}. ${repoNote}`,
+  });
+  await audit("vigia:bootstrap", { id: job.id, name: spec.name, workdir, repo: repoNote });
+  await telegram(`🐣✅ Projeto "${spec.name}" nasceu!\n📁 ${workdir}\n${repoNote}\n\nPode despachar chamados pra ele (pipeline direto).`);
+  console.log(`🐣✅ ${spec.name}: ${repoNote}`);
+}
+
 // ── mescla UM chamado aprovado (git invisível para o Cris) ───
 async function mergeJob(job) {
   const workdir = resolve(job.workdir || resolve(ROOT));
@@ -212,8 +270,17 @@ do {
     if (approved.length > 0) await mergeJob(approved[0]);
     else {
       const jobs = await rest("dev_backlog?status=eq.dispatched&order=created_at&limit=1");
-      if (jobs.length > 0) await runJob(jobs[0]);
-      else if (once) console.log("nada despachado.");
+      if (jobs.length > 0) {
+        const job = jobs[0];
+        try {
+          if (job.job_type === "bootstrap") await bootstrapJob(job);
+          else await runJob(job);
+        } catch (err) {
+          await setStatus(job.id, { status: "failed", resolution: err.message });
+          await telegram(`❌ Chamado "${job.request}" falhou: ${err.message}`);
+          console.error("job falhou:", err.message);
+        }
+      } else if (once) console.log("nada despachado.");
     }
   } catch (err) {
     console.error("vigia:", err.message);

@@ -20,3 +20,7 @@ alter table dev_backlog add constraint dev_backlog_status_check
 -- e 'protegido' (produção: separado + aprovação do Cris antes de subir)
 alter table dev_backlog add column if not exists pipeline text not null default 'protegido'
   check (pipeline in ('direto','protegido'));
+
+-- v4: job_type — 'code' (chamado normal) | 'bootstrap' (nascer projeto: pasta + git + repo)
+alter table dev_backlog add column if not exists job_type text not null default 'code'
+  check (job_type in ('code','bootstrap'));
