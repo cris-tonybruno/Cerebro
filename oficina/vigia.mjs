@@ -203,18 +203,26 @@ async function bootstrapJob(job) {
   git(workdir, ["add", "-A"]);
   git(workdir, ["commit", "-q", "-m", `Nasce ${spec.name} (bootstrap por voz via OLIVER)`]);
 
-  // GitHub: usa o gh CLI com a conta certa, se disponível (credencial só no PC)
+  // GitHub: usa o gh CLI com a conta certa, se disponível (credencial só no PC).
+  // Alterna para a conta dona do projeto e DEVOLVE a conta ativa ao final.
   let repoNote = "";
   try {
     const accounts = execSync("gh auth status 2>&1", { encoding: "utf8" });
+    const activeBefore = accounts.match(/account (\S+) \(keyring\)[\s\S]*?Active account: true/)?.[1] ?? null;
     if (accounts.includes(spec.owner)) {
       try { execSync(`gh auth switch --user ${spec.owner}`, { stdio: "ignore" }); } catch {}
-      execSync(`gh repo create ${spec.owner}/${spec.slug} --private --source . --push`, {
-        cwd: workdir,
-        stdio: "ignore",
-        timeout: 120_000,
-      });
-      repoNote = `GitHub: https://github.com/${spec.owner}/${spec.slug} (privado)`;
+      try {
+        execSync(`gh repo create ${spec.owner}/${spec.slug} --private --source . --push`, {
+          cwd: workdir,
+          stdio: "ignore",
+          timeout: 120_000,
+        });
+        repoNote = `GitHub: https://github.com/${spec.owner}/${spec.slug} (privado)`;
+      } finally {
+        if (activeBefore && activeBefore !== spec.owner) {
+          try { execSync(`gh auth switch --user ${activeBefore}`, { stdio: "ignore" }); } catch {}
+        }
+      }
     } else {
       repoNote = `⚠️ GitHub pendente: a conta ${spec.owner} não está logada no gh CLI (rode: gh auth login). Projeto existe localmente.`;
     }
