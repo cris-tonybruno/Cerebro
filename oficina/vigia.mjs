@@ -89,6 +89,7 @@ async function runJob(job) {
   await audit("vigia:building", { id: job.id, request: job.request, workdir, pipeline: job.pipeline });
 
   const baseBranch = git(workdir, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const startHead = git(workdir, ["rev-parse", "HEAD"]); // marco zero do chamado
   // protegido: trabalho em separado (aprovação antes de subir) · direto: na própria main
   const branch = direto ? baseBranch : `chamado/${short}`;
   if (!direto) git(workdir, ["checkout", "-B", branch]);
@@ -119,15 +120,18 @@ ${job.directive}`;
     output = `${err.stdout ?? ""}\n[ERRO] ${err.message}`;
   }
 
-  const commits = direto
-    ? git(workdir, ["log", "@{u}..HEAD", "--oneline"]) // o que ainda não foi pro remoto
-    : git(workdir, ["log", `${baseBranch}..${branch}`, "--oneline"]);
+  const commits = git(workdir, ["log", `${startHead}..HEAD`, "--oneline"]); // funciona com ou sem remoto
   const summary = output.trim().slice(-1500);
 
   if (ok && commits) {
     if (direto) {
-      // projeto novo: sobe direto, sem etapa de aprovação
-      git(workdir, ["push", "origin", baseBranch]);
+      // projeto novo: sobe direto, sem etapa de aprovação (sem remoto = fica local, sem drama)
+      let pushNote = "";
+      try {
+        git(workdir, ["push", "origin", baseBranch]);
+      } catch {
+        pushNote = " (sem remoto GitHub ainda — trabalho salvo localmente)";
+      }
       await setStatus(job.id, {
         status: "merged",
         branch: baseBranch,
@@ -136,7 +140,7 @@ ${job.directive}`;
       });
       await audit("vigia:merged", { id: job.id, pipeline: "direto", commits });
       await telegram(
-        `🚀 Chamado "${job.request}" construído e JÁ NO PROJETO (pipeline direto).\n\nCommits:\n${commits}\n\n${summary.slice(-600)}`
+        `🚀 Chamado "${job.request}" construído e JÁ NO PROJETO (pipeline direto)${pushNote}.\n\nCommits:\n${commits}\n\n${summary.slice(-600)}`
       );
       console.log(`🚀 direto: ${commits}`);
     } else {
