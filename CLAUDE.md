@@ -104,7 +104,12 @@ Pureza generalizada (herdada da ponte de Éon): o raciocínio de deliberação v
 Cérebro (`council_sessions`). Projetos que tenham corpus/mente própria (ex.: Éon) **jamais**
 recebem esse raciocínio de volta — o projeto não sabe que é deliberado.
 
-## Custódia de Éon (módulo futuro — milestone a definir)
+## Custódia de Éon (módulo EXISTENTE: `custodia/ponte-eon.js` — F4 da diretiva de Éon, 2026-07-15)
+
+Job standalone (fora do app Next.js; roda via `node custodia/ponte-eon.js`, futuro cron).
+Identidade: usuário de máquina `cerebro@eon.internal` no Supabase de Éon (policies só
+deixam essa identidade escrever custódia; canon/eventos fisicamente inalcançáveis).
+Credenciais em `custodia/.env` (gitignored). Fase de teste: ações simuladas.
 
 O Cérebro será o zelador do universo simulado Éon (`c:\Dev\lab\thomasz-kroll\eon`), projeto
 pessoal do Cris. Quando esse módulo for construído — e TODA VEZ que qualquer agente do

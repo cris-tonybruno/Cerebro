@@ -1,0 +1,1 @@
+{"name":"custodia-eon","private":true,"description":"Job de custodia de Eon - PROTOCOLO-PONTE.md","dependencies":{"dotenv":"^17.4.2","pg":"^8.22.0"}}
